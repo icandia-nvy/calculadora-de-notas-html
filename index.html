@@ -109,25 +109,25 @@
 
         const generateId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-        // ============== GESTIÓN DE COOKIES ==============
+        // ============== GESTIÓN DE LOCALSTORAGE ==============
+        // Se utiliza localStorage en lugar de cookies para permitir un guardado de mayor tamaño y más eficiente.
 
-        const saveStateToCookie = (state) => {
+        const saveStateToLocalStorage = (state) => {
             try {
                 const stateString = JSON.stringify(state);
-                document.cookie = `gradeCalculatorState=${encodeURIComponent(stateString)};path=/;max-age=31536000;samesite=lax`;
+                localStorage.setItem('gradeCalculatorState', stateString);
             } catch (e) {
-                console.error("No se pudo guardar el estado en la cookie:", e);
+                console.error("No se pudo guardar el estado en localStorage:", e);
             }
         };
 
-        const loadStateFromCookie = () => {
+        const loadStateFromLocalStorage = () => {
             try {
-                const cookieString = document.cookie.split('; ').find(row => row.startsWith('gradeCalculatorState='));
-                if (!cookieString) return null;
-                const stateString = decodeURIComponent(cookieString.split('=')[1]);
+                const stateString = localStorage.getItem('gradeCalculatorState');
+                if (stateString === null) return null;
                 return JSON.parse(stateString);
             } catch (e) {
-                console.error("No se pudo cargar el estado desde la cookie:", e);
+                console.error("No se pudo cargar el estado desde localStorage:", e);
                 return null;
             }
         };
@@ -565,7 +565,7 @@
             };
             
             const getInitialState = () => {
-                const loadedState = loadStateFromCookie();
+                const loadedState = loadStateFromLocalStorage();
                 if (loadedState) {
                     const sheetsWithWidth = (loadedState.sheets || []).map(sheet => ({
                         ...sheet,
@@ -590,7 +590,7 @@
 
             React.useEffect(() => {
                 const stateToSave = { sheets, activeSheetId, globalSettings };
-                saveStateToCookie(stateToSave);
+                saveStateToLocalStorage(stateToSave);
             }, [sheets, activeSheetId, globalSettings]);
 
             const handleUpdateSheet = React.useCallback(u => setSheets(p => p.map(s => s.id === u.id ? u : s)), []);
