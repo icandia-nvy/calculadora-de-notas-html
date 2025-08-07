@@ -66,6 +66,10 @@
             width: 5px;
             cursor: col-resize;
             z-index: 20;
+            background-color: #d1d5db; /* Gray-300 */
+            transition: background-color 0.2s;
+        }
+        .resize-handle:hover {
             background-color: #3b82f6; /* Blue-500 */
         }
     </style>
@@ -73,6 +77,8 @@
 <body>
     <!-- El div raíz donde se montará la aplicación de React -->
     <div id="root"></div>
+    <!-- El div portal para los menús desplegables -->
+    <div id="portal-root"></div>
 
     <!-- El script principal de la aplicación de React -->
     <script type="text/babel">
@@ -107,11 +113,9 @@
             return finalGrade;
         };
 
-        const generateId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const generateId = () => `id_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 9)}`;
 
         // ============== GESTIÓN DE LOCALSTORAGE ==============
-        // Se utiliza localStorage en lugar de cookies para permitir un guardado de mayor tamaño y más eficiente.
-
         const saveStateToLocalStorage = (state) => {
             try {
                 const stateString = JSON.stringify(state);
@@ -134,39 +138,32 @@
 
         // ============== COMPONENTES DE REACT ==============
 
-        const Modal = ({ isOpen, onClose, title, children }) => {
-            if (!isOpen) return null;
-            return (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4">
-                    <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-bold text-gray-800">{title}</h3>
-                            <button onClick={onClose} className="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
-                        </div>
-                        <div>{children}</div>
-                    </div>
-                </div>
-            );
-        };
-
-        const AddEvalModal = ({ isOpen, onClose, onAdd }) => {
+        const AddEvalDropdown = ({ onAdd, onClose }) => {
             const [name, setName] = React.useState('Nueva Evaluación');
             const [maxScore, setMaxScore] = React.useState(10);
             const [exigency, setExigency] = React.useState(60);
+            const dropdownRef = React.useRef(null);
+
+            React.useEffect(() => {
+                const handleClickOutside = (event) => {
+                    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                        onClose();
+                    }
+                };
+                document.addEventListener("mousedown", handleClickOutside);
+                return () => document.removeEventListener("mousedown", handleClickOutside);
+            }, [onClose]);
 
             const handleSubmit = () => {
                 if (name && maxScore > 0 && exigency >= 0 && exigency <= 100) {
                     onAdd({ name, maxScore, exigency });
                     onClose();
-                    setName('Nueva Evaluación');
-                    setMaxScore(10);
-                    setExigency(60);
                 }
             };
 
             return (
-                <Modal isOpen={isOpen} onClose={onClose} title="Añadir Nueva Evaluación">
-                    <div className="space-y-4">
+                <div ref={dropdownRef} className="absolute top-full right-0 mt-2 w-64 bg-white rounded-md shadow-lg z-50 p-4 border">
+                    <div className="space-y-3">
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Nombre</label>
                             <input type="text" value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
@@ -179,20 +176,50 @@
                             <label className="block text-sm font-medium text-gray-700">Exigencia (%)</label>
                             <input type="number" value={exigency} onChange={e => setExigency(parseFloat(e.target.value))} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
                         </div>
-                        <div className="flex justify-end pt-4">
-                            <button onClick={handleSubmit} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Añadir</button>
+                        <div className="flex justify-end">
+                            <button onClick={handleSubmit} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Añadir</button>
                         </div>
                     </div>
-                </Modal>
+                </div>
             );
         };
 
-        const DiffScoreModal = ({ isOpen, onClose, evaluation, onSave }) => {
+        const DiffScoreDropdown = ({ evaluation, onSave, onClose, triggerRef }) => {
             const [evalData, setEvalData] = React.useState(evaluation);
+            const [position, setPosition] = React.useState({ top: 0, left: 0 });
+            const dropdownRef = React.useRef(null);
+
+            const updatePosition = React.useCallback(() => {
+                if (triggerRef.current) {
+                    const rect = triggerRef.current.getBoundingClientRect();
+                    const dropdownWidth = 256; // Corresponds to w-64
+                    setPosition({
+                        top: rect.bottom + window.scrollY + 4,
+                        left: rect.right + window.scrollX - dropdownWidth,
+                    });
+                }
+            }, [triggerRef]);
 
             React.useEffect(() => {
                 setEvalData(evaluation);
-            }, [evaluation]);
+                updatePosition();
+            }, [evaluation, updatePosition]);
+            
+            React.useEffect(() => {
+                const handleClickOutside = (event) => {
+                    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                        onClose();
+                    }
+                };
+                window.addEventListener('scroll', updatePosition, true);
+                window.addEventListener('resize', updatePosition);
+                document.addEventListener("mousedown", handleClickOutside);
+                return () => {
+                    window.removeEventListener('scroll', updatePosition, true);
+                    window.removeEventListener('resize', updatePosition);
+                    document.removeEventListener("mousedown", handleClickOutside);
+                };
+            }, [onClose, updatePosition]);
 
             if (!evalData) return null;
 
@@ -202,35 +229,41 @@
                 setEvalData(prev => ({...prev, differentiatedScores: {...prev.differentiatedScores, [color]: isNaN(numValue) ? 0 : numValue}}));
             };
 
-            return (
-                <Modal isOpen={isOpen} onClose={onClose} title={`Puntajes Diferenciados: ${evalData.name}`}>
-                    <div className="space-y-4">
-                        <div className="flex items-center">
+            const dropdownContent = (
+                <div 
+                    ref={dropdownRef} 
+                    className="fixed bg-white rounded-md shadow-lg z-50 p-4 border w-64"
+                    style={{ top: `${position.top}px`, left: `${position.left}px` }}
+                >
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <label className="block text-sm text-gray-900">Habilitar diferenciados</label>
                             <input type="checkbox" checked={evalData.differentiatedScores.enabled} onChange={handleToggle} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-                            <label className="ml-2 block text-sm text-gray-900">Habilitar puntajes diferenciados</label>
                         </div>
                         {evalData.differentiatedScores.enabled && (
-                            <div className="grid grid-cols-1 gap-4 mt-4">
+                            <div className="space-y-2">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700">P. Máx. <span className="font-bold text-green-600">Verde</span></label>
-                                    <input type="text" value={evalData.differentiatedScores.green} onChange={e => handleChange('green', e.target.value)} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+                                    <label className="block text-xs font-medium text-gray-700">P. Máx. <span className="font-bold text-green-600">Verde</span></label>
+                                    <input type="text" value={evalData.differentiatedScores.green} onChange={e => handleChange('green', e.target.value)} className="mt-1 block w-full px-2 py-1 border rounded-md text-sm"/>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700">P. Máx. <span className="font-bold text-yellow-600">Amarillo</span></label>
-                                    <input type="text" value={evalData.differentiatedScores.yellow} onChange={e => handleChange('yellow', e.target.value)} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+                                    <label className="block text-xs font-medium text-gray-700">P. Máx. <span className="font-bold text-yellow-600">Amarillo</span></label>
+                                    <input type="text" value={evalData.differentiatedScores.yellow} onChange={e => handleChange('yellow', e.target.value)} className="mt-1 block w-full px-2 py-1 border rounded-md text-sm"/>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700">P. Máx. <span className="font-bold text-blue-600">Azul</span></label>
-                                    <input type="text" value={evalData.differentiatedScores.blue} onChange={e => handleChange('blue', e.target.value)} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+                                    <label className="block text-xs font-medium text-gray-700">P. Máx. <span className="font-bold text-blue-600">Azul</span></label>
+                                    <input type="text" value={evalData.differentiatedScores.blue} onChange={e => handleChange('blue', e.target.value)} className="mt-1 block w-full px-2 py-1 border rounded-md text-sm"/>
                                 </div>
                             </div>
                         )}
-                        <div className="flex justify-end pt-4">
-                            <button onClick={() => { onSave(evalData); onClose(); }} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Guardar Cambios</button>
+                        <div className="flex justify-end pt-2">
+                            <button onClick={() => { onSave(evalData); onClose(); }} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Guardar</button>
                         </div>
                     </div>
-                </Modal>
+                </div>
             );
+            
+            return ReactDOM.createPortal(dropdownContent, document.getElementById('portal-root'));
         };
 
         const Placeholder = ({ onStartManual }) => (
@@ -244,7 +277,7 @@
         );
 
         const Header = ({ activeSheet, onAddEvaluation, onAddStudent, onFileImport, onExport, sheetsCount }) => {
-            const [isAddEvalModalOpen, setAddEvalModalOpen] = React.useState(false);
+            const [isAddEvalDropdownOpen, setAddEvalDropdownOpen] = React.useState(false);
             const fileInputRef = React.useRef(null);
             
             const handleFileChange = (event) => {
@@ -256,19 +289,19 @@
             };
 
             return (
-                <>
-                    <AddEvalModal isOpen={isAddEvalModalOpen} onClose={() => setAddEvalModalOpen(false)} onAdd={onAddEvaluation} />
-                    <div className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b-2 border-gray-200">
-                        <h1 className="text-3xl font-bold text-gray-800">Calculadora de Notas</h1>
-                        <div className="flex items-center space-x-2 mt-4 sm:mt-0">
-                            <button onClick={() => setAddEvalModalOpen(true)} disabled={!activeSheet} className="px-4 py-2 bg-green-500 text-white rounded-md shadow-sm hover:bg-green-600 disabled:bg-gray-300">Añadir Evaluación</button>
-                            <button onClick={onAddStudent} disabled={!activeSheet} className="px-4 py-2 bg-blue-500 text-white rounded-md shadow-sm hover:bg-blue-600 disabled:bg-gray-300">Añadir Alumno</button>
-                            <button onClick={() => fileInputRef.current.click()} className="px-4 py-2 bg-gray-700 text-white rounded-md shadow-sm hover:bg-gray-800">Importar</button>
-                            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
-                            <button onClick={onExport} disabled={sheetsCount === 0} className="px-4 py-2 bg-orange-500 text-white rounded-md shadow-sm hover:bg-orange-600 disabled:bg-gray-300">Exportar</button>
+                <div className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b-2 border-gray-200">
+                    <h1 className="text-3xl font-bold text-gray-800">Calculadora de Notas</h1>
+                    <div className="flex items-center space-x-2 mt-4 sm:mt-0">
+                        <div className="relative">
+                            <button onClick={() => setAddEvalDropdownOpen(prev => !prev)} disabled={!activeSheet} className="px-4 py-2 bg-green-500 text-white rounded-md shadow-sm hover:bg-green-600 disabled:bg-gray-300">Añadir Evaluación</button>
+                            {isAddEvalDropdownOpen && <AddEvalDropdown onAdd={onAddEvaluation} onClose={() => setAddEvalDropdownOpen(false)} />}
                         </div>
+                        <button onClick={onAddStudent} disabled={!activeSheet} className="px-4 py-2 bg-blue-500 text-white rounded-md shadow-sm hover:bg-blue-600 disabled:bg-gray-300">Añadir Alumno</button>
+                        <button onClick={() => fileInputRef.current.click()} className="px-4 py-2 bg-gray-700 text-white rounded-md shadow-sm hover:bg-gray-800">Importar</button>
+                        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+                        <button onClick={onExport} disabled={sheetsCount === 0} className="px-4 py-2 bg-orange-500 text-white rounded-md shadow-sm hover:bg-orange-600 disabled:bg-gray-300">Exportar</button>
                     </div>
-                </>
+                </div>
             );
         };
 
@@ -343,14 +376,15 @@
         };
 
         const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
-            const [diffModalOpen, setDiffModalOpen] = React.useState(false);
-            const [currentEval, setCurrentEval] = React.useState(null);
+            const [openDropdownEvalId, setOpenDropdownEvalId] = React.useState(null);
+            const dropdownTriggerRefs = React.useRef({});
             const inputRefs = React.useRef({});
 
-            const openDiffModal = (evaluation) => {
-                setCurrentEval(evaluation);
-                setDiffModalOpen(true);
-            };
+            React.useEffect(() => {
+                // Limpia las referencias cuando la hoja o los datos cambian para evitar fugas de memoria.
+                inputRefs.current = {};
+                dropdownTriggerRefs.current = {};
+            }, [sheet.id, sheet.studentData.length, sheet.evaluations.length]);
 
             const handleSaveDiffScores = (updatedEval) => {
                 const updatedEvals = sheet.evaluations.map(ev => ev.id === updatedEval.id ? updatedEval : ev);
@@ -459,11 +493,9 @@
             };
 
             return (
-                <>
-                <DiffScoreModal isOpen={diffModalOpen} onClose={() => setDiffModalOpen(false)} evaluation={currentEval} onSave={handleSaveDiffScores} />
                 <div className="bg-white p-2 sm:p-4 rounded-b-lg shadow-md flex">
                     {/* Fixed Columns */}
-                    <div className="z-10 relative">
+                    <div className="relative">
                         <table className="table-fixed border-separate" style={{ borderSpacing: 0 }}>
                             <thead className="bg-gray-50">
                                 <tr className="h-16">
@@ -511,7 +543,10 @@
                                         <th key={ev.id} colSpan="2" className="p-3 text-center text-xs font-medium text-gray-500 relative group">
                                             <div className="flex justify-center items-center">
                                                 <input type="text" value={ev.name} onChange={e => handleEvalNameChange(i, e.target.value)} className="font-bold text-base bg-transparent w-full text-center focus:bg-yellow-100 px-1 rounded"/>
-                                                <button onClick={() => openDiffModal(ev)} className="ml-2 text-lg text-gray-500 hover:text-blue-600">⚙️</button>
+                                                <div className="relative">
+                                                    <button ref={el => dropdownTriggerRefs.current[ev.id] = el} onClick={() => setOpenDropdownEvalId(openDropdownEvalId === ev.id ? null : ev.id)} className="ml-2 text-lg text-gray-500 hover:text-blue-600">⚙️</button>
+                                                    {openDropdownEvalId === ev.id && <DiffScoreDropdown evaluation={ev} onSave={handleSaveDiffScores} onClose={() => setOpenDropdownEvalId(null)} triggerRef={{ current: dropdownTriggerRefs.current[ev.id] }} />}
+                                                </div>
                                                 <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <button onClick={() => delEval(i)} className="p-1 bg-white rounded shadow hover:bg-red-100">
                                                         <span className="text-red-500 font-bold">×</span>
@@ -551,7 +586,6 @@
                         </table>
                     </div>
                 </div>
-                </>
             );
         };
         
@@ -647,7 +681,10 @@
                         const ws = workbook.Sheets[name];
                         const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
                         
-                        if (json.length < 5) return null;
+                        if (json.length < 5 || json[4][1] !== 'Alumnos') {
+                            console.error("El formato del archivo Excel no es válido.");
+                            return null;
+                        }
 
                         const studentHeader = json[4][1];
                         const highlightColIndex = json[4].findIndex(h => h === 'Highlight');
