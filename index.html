@@ -4,795 +4,666 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Calculadora de Notas con Guardado Automático</title>
-
-    <!-- CDN de Tailwind CSS para los estilos -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- CDN de SheetJS (XLSX) para importar/exportar archivos Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    
-    <!-- CDN de Google Fonts para la tipografía -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    <!-- CDNs para React y Babel (necesario para ejecutar JSX en el navegador) -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
     <style>
-        /* Estilos personalizados que complementan a Tailwind CSS */
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6;
-            color: #1f2937;
-        }
-        .grade-fail {
-            color: #dc2626;
-            font-weight: bold;
-        }
-        .grade-pass {
-            color: #1d4ed8;
-            font-weight: bold;
-        }
-        .tab.active {
-            border-bottom-color: white;
-        }
-        .tab-close-btn {
-            opacity: 0.2;
-            transition: opacity 0.2s ease;
-        }
-        .tab:hover .tab-close-btn, .group:hover .tab-close-btn {
-            opacity: 1;
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; color: #1f2937; }
+        .grade-fail { color: #dc2626; font-weight: bold; }
+        .grade-pass { color: #1d4ed8; font-weight: bold; }
+        .tab.active { border-bottom-color: white; }
+        .tab-close-btn { opacity: 0.2; transition: opacity 0.2s ease; }
+        .tab:hover .tab-close-btn, .group:hover .tab-close-btn { opacity: 1; }
         .highlight-green { background-color: #dcfce7 !important; }
         .highlight-yellow { background-color: #fef9c3 !important; }
         .highlight-blue { background-color: #dbeafe !important; }
-        /* Ocultar los botones de incremento/decremento en los inputs de tipo number */
-        input[type=number]::-webkit-inner-spin-button, 
-        input[type=number]::-webkit-outer-spin-button { 
-          -webkit-appearance: none; 
-          margin: 0; 
-        }
-        input[type=number] {
-          -moz-appearance: textfield;
-        }
-        .resize-handle {
-            position: absolute;
-            right: -2px;
-            top: 0;
-            bottom: 0;
-            width: 5px;
-            cursor: col-resize;
-            z-index: 20;
-            background-color: #d1d5db; /* Gray-300 */
-            transition: background-color 0.2s;
-        }
-        .resize-handle:hover {
-            background-color: #3b82f6; /* Blue-500 */
-        }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        .resize-handle { position: absolute; right: -2px; top: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 20; background-color: #3b82f6; }
     </style>
 </head>
 <body>
-    <!-- El div raíz donde se montará la aplicación de React -->
-    <div id="root"></div>
-    <!-- El div portal para los menús desplegables -->
-    <div id="portal-root"></div>
+<div id="root"></div>
+<div id="portal-root"></div>
+<script type="text/babel" data-type="module">
 
-    <!-- El script principal de la aplicación de React -->
-    <script type="text/babel">
-        // El atributo type="text/babel" le indica al CDN de Babel que transpile este código.
+// Utilidades
+const calculateGrade = (score, maxScore, passingPercentage, settings) => {
+    if (typeof score === 'string') score = score.replace(',', '.');
+    score = parseFloat(score);
+    maxScore = parseFloat(maxScore);
+    passingPercentage = parseFloat(passingPercentage);
+    const { minGrade, passingGrade, maxGrade } = settings;
+    if (isNaN(score) || isNaN(maxScore) || isNaN(passingPercentage) || maxScore <= 0) return NaN;
+    if (score > maxScore) score = maxScore;
+    const passingScore = maxScore * (passingPercentage / 100);
+    let finalGrade;
+    if (score <= passingScore) {
+        finalGrade = (passingScore === 0) ? passingGrade : minGrade + (score * ((passingGrade - minGrade) / passingScore));
+    } else {
+        const scoreRange = maxScore - passingScore;
+        finalGrade = (scoreRange <= 0) ? maxGrade : passingGrade + ((score - passingScore) * ((maxGrade - passingGrade) / scoreRange));
+    }
+    return finalGrade;
+};
+const generateId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+const saveStateToLocalStorage = (state) => {
+    try { localStorage.setItem('gradeCalculatorState', JSON.stringify(state)); } catch {}
+};
+const loadStateFromLocalStorage = () => {
+    try {
+        const stateString = localStorage.getItem('gradeCalculatorState');
+        if (stateString === null) return null;
+        return JSON.parse(stateString);
+    } catch {
+        return null;
+    }
+};
 
-        // ============== FUNCIONES DE UTILIDAD ==============
-        
-        const calculateGrade = (score, maxScore, passingPercentage, settings) => {
-            if (typeof score === 'string') {
-                score = score.replace(',', '.');
-            }
-            score = parseFloat(score);
-            maxScore = parseFloat(maxScore);
-            passingPercentage = parseFloat(passingPercentage);
-            const { minGrade, passingGrade, maxGrade } = settings;
-
-            if (isNaN(score) || isNaN(maxScore) || isNaN(passingPercentage) || maxScore <= 0) {
-                return NaN;
-            }
-
-            if (score > maxScore) score = maxScore;
-
-            const passingScore = maxScore * (passingPercentage / 100);
-            let finalGrade;
-
-            if (score <= passingScore) {
-                finalGrade = (passingScore === 0) ? passingGrade : minGrade + (score * ((passingGrade - minGrade) / passingScore));
-            } else {
-                const scoreRange = maxScore - passingScore;
-                finalGrade = (scoreRange <= 0) ? maxGrade : passingGrade + ((score - passingScore) * ((maxGrade - passingGrade) / scoreRange));
-            }
-            return finalGrade;
+// Componentes
+const AddEvalDropdown = ({ onAdd, onClose }) => {
+    const [name, setName] = React.useState('Nueva Evaluación');
+    const [maxScore, setMaxScore] = React.useState(10);
+    const [exigency, setExigency] = React.useState(60);
+    const dropdownRef = React.useRef(null);
+    React.useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) onClose();
         };
-
-        const generateId = () => `id_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 9)}`;
-
-        // ============== GESTIÓN DE LOCALSTORAGE ==============
-        const saveStateToLocalStorage = (state) => {
-            try {
-                const stateString = JSON.stringify(state);
-                localStorage.setItem('gradeCalculatorState', stateString);
-            } catch (e) {
-                console.error("No se pudo guardar el estado en localStorage:", e);
-            }
-        };
-
-        const loadStateFromLocalStorage = () => {
-            try {
-                const stateString = localStorage.getItem('gradeCalculatorState');
-                if (stateString === null) return null;
-                return JSON.parse(stateString);
-            } catch (e) {
-                console.error("No se pudo cargar el estado desde localStorage:", e);
-                return null;
-            }
-        };
-
-        // ============== COMPONENTES DE REACT ==============
-
-        const AddEvalDropdown = ({ onAdd, onClose }) => {
-            const [name, setName] = React.useState('Nueva Evaluación');
-            const [maxScore, setMaxScore] = React.useState(10);
-            const [exigency, setExigency] = React.useState(60);
-            const dropdownRef = React.useRef(null);
-
-            React.useEffect(() => {
-                const handleClickOutside = (event) => {
-                    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                        onClose();
-                    }
-                };
-                document.addEventListener("mousedown", handleClickOutside);
-                return () => document.removeEventListener("mousedown", handleClickOutside);
-            }, [onClose]);
-
-            const handleSubmit = () => {
-                if (name && maxScore > 0 && exigency >= 0 && exigency <= 100) {
-                    onAdd({ name, maxScore, exigency });
-                    onClose();
-                }
-            };
-
-            return (
-                <div ref={dropdownRef} className="absolute top-full right-0 mt-2 w-64 bg-white rounded-md shadow-lg z-50 p-4 border">
-                    <div className="space-y-3">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Nombre</label>
-                            <input type="text" value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Puntaje Máximo</label>
-                            <input type="number" value={maxScore} onChange={e => setMaxScore(parseFloat(e.target.value))} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Exigencia (%)</label>
-                            <input type="number" value={exigency} onChange={e => setExigency(parseFloat(e.target.value))} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
-                        </div>
-                        <div className="flex justify-end">
-                            <button onClick={handleSubmit} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Añadir</button>
-                        </div>
-                    </div>
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [onClose]);
+    const handleSubmit = () => {
+        if (name && maxScore > 0 && exigency >= 0 && exigency <= 100) {
+            onAdd({ name, maxScore, exigency }); onClose();
+        }
+    };
+    return (
+        <div ref={dropdownRef} className="absolute top-full right-0 mt-2 w-64 bg-white rounded-md shadow-lg z-30 p-4 border">
+            <div className="space-y-3">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Nombre</label>
+                    <input type="text" value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
                 </div>
-            );
-        };
-
-        const DiffScoreDropdown = ({ evaluation, onSave, onClose, triggerRef }) => {
-            const [evalData, setEvalData] = React.useState(evaluation);
-            const [position, setPosition] = React.useState({ top: 0, left: 0 });
-            const dropdownRef = React.useRef(null);
-
-            const updatePosition = React.useCallback(() => {
-                if (triggerRef.current) {
-                    const rect = triggerRef.current.getBoundingClientRect();
-                    const dropdownWidth = 256; // Corresponds to w-64
-                    setPosition({
-                        top: rect.bottom + window.scrollY + 4,
-                        left: rect.right + window.scrollX - dropdownWidth,
-                    });
-                }
-            }, [triggerRef]);
-
-            React.useEffect(() => {
-                setEvalData(evaluation);
-                updatePosition();
-            }, [evaluation, updatePosition]);
-            
-            React.useEffect(() => {
-                const handleClickOutside = (event) => {
-                    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                        onClose();
-                    }
-                };
-                window.addEventListener('scroll', updatePosition, true);
-                window.addEventListener('resize', updatePosition);
-                document.addEventListener("mousedown", handleClickOutside);
-                return () => {
-                    window.removeEventListener('scroll', updatePosition, true);
-                    window.removeEventListener('resize', updatePosition);
-                    document.removeEventListener("mousedown", handleClickOutside);
-                };
-            }, [onClose, updatePosition]);
-
-            if (!evalData) return null;
-
-            const handleToggle = () => setEvalData(prev => ({...prev, differentiatedScores: {...prev.differentiatedScores, enabled: !prev.differentiatedScores.enabled}}));
-            const handleChange = (color, value) => {
-                const numValue = parseFloat(value.replace(',', '.'));
-                setEvalData(prev => ({...prev, differentiatedScores: {...prev.differentiatedScores, [color]: isNaN(numValue) ? 0 : numValue}}));
-            };
-
-            const dropdownContent = (
-                <div 
-                    ref={dropdownRef} 
-                    className="fixed bg-white rounded-md shadow-lg z-50 p-4 border w-64"
-                    style={{ top: `${position.top}px`, left: `${position.left}px` }}
-                >
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                            <label className="block text-sm text-gray-900">Habilitar diferenciados</label>
-                            <input type="checkbox" checked={evalData.differentiatedScores.enabled} onChange={handleToggle} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-                        </div>
-                        {evalData.differentiatedScores.enabled && (
-                            <div className="space-y-2">
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700">P. Máx. <span className="font-bold text-green-600">Verde</span></label>
-                                    <input type="text" value={evalData.differentiatedScores.green} onChange={e => handleChange('green', e.target.value)} className="mt-1 block w-full px-2 py-1 border rounded-md text-sm"/>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700">P. Máx. <span className="font-bold text-yellow-600">Amarillo</span></label>
-                                    <input type="text" value={evalData.differentiatedScores.yellow} onChange={e => handleChange('yellow', e.target.value)} className="mt-1 block w-full px-2 py-1 border rounded-md text-sm"/>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700">P. Máx. <span className="font-bold text-blue-600">Azul</span></label>
-                                    <input type="text" value={evalData.differentiatedScores.blue} onChange={e => handleChange('blue', e.target.value)} className="mt-1 block w-full px-2 py-1 border rounded-md text-sm"/>
-                                </div>
-                            </div>
-                        )}
-                        <div className="flex justify-end pt-2">
-                            <button onClick={() => { onSave(evalData); onClose(); }} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Guardar</button>
-                        </div>
-                    </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Puntaje Máximo</label>
+                    <input type="number" step="any" min="0" value={maxScore} onChange={e => setMaxScore(parseFloat(e.target.value))} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
                 </div>
-            );
-            
-            return ReactDOM.createPortal(dropdownContent, document.getElementById('portal-root'));
-        };
-
-        const Placeholder = ({ onStartManual }) => (
-            <div className="text-center bg-white p-10 rounded-lg shadow-md">
-                <h2 className="text-2xl font-bold text-gray-700 mb-4">Comienza a Calcular Notas</h2>
-                <p className="text-gray-500 mb-6">Puedes importar un archivo de Excel o crear una tabla manualmente.</p>
-                <button onClick={onStartManual} className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700">
-                    Crear Tabla Manualmente
-                </button>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Exigencia (%)</label>
+                    <input type="number" step="any" min="0" max="100" value={exigency} onChange={e => setExigency(parseFloat(e.target.value))} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+                </div>
+                <div className="flex justify-end">
+                    <button onClick={handleSubmit} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Añadir</button>
+                </div>
             </div>
-        );
-
-        const Header = ({ activeSheet, onAddEvaluation, onAddStudent, onFileImport, onExport, sheetsCount }) => {
-            const [isAddEvalDropdownOpen, setAddEvalDropdownOpen] = React.useState(false);
-            const fileInputRef = React.useRef(null);
-            
-            const handleFileChange = (event) => {
-                const file = event.target.files[0];
-                if (file) {
-                    onFileImport(file);
-                }
-                event.target.value = '';
-            };
-
-            return (
-                <div className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b-2 border-gray-200">
-                    <h1 className="text-3xl font-bold text-gray-800">Calculadora de Notas</h1>
-                    <div className="flex items-center space-x-2 mt-4 sm:mt-0">
-                        <div className="relative">
-                            <button onClick={() => setAddEvalDropdownOpen(prev => !prev)} disabled={!activeSheet} className="px-4 py-2 bg-green-500 text-white rounded-md shadow-sm hover:bg-green-600 disabled:bg-gray-300">Añadir Evaluación</button>
-                            {isAddEvalDropdownOpen && <AddEvalDropdown onAdd={onAddEvaluation} onClose={() => setAddEvalDropdownOpen(false)} />}
-                        </div>
-                        <button onClick={onAddStudent} disabled={!activeSheet} className="px-4 py-2 bg-blue-500 text-white rounded-md shadow-sm hover:bg-blue-600 disabled:bg-gray-300">Añadir Alumno</button>
-                        <button onClick={() => fileInputRef.current.click()} className="px-4 py-2 bg-gray-700 text-white rounded-md shadow-sm hover:bg-gray-800">Importar</button>
-                        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
-                        <button onClick={onExport} disabled={sheetsCount === 0} className="px-4 py-2 bg-orange-500 text-white rounded-md shadow-sm hover:bg-orange-600 disabled:bg-gray-300">Exportar</button>
-                    </div>
-                </div>
-            );
-        };
-
-        const GlobalSettings = ({ settings, setSettings }) => {
-            const [displayValues, setDisplayValues] = React.useState({
-                minGrade: settings.minGrade.toFixed(1),
-                passingGrade: settings.passingGrade.toFixed(1),
-                maxGrade: settings.maxGrade.toFixed(1)
-            });
-
-            React.useEffect(() => {
-                setDisplayValues({
-                    minGrade: settings.minGrade.toFixed(1),
-                    passingGrade: settings.passingGrade.toFixed(1),
-                    maxGrade: settings.maxGrade.toFixed(1)
+        </div>
+    );
+};
+const DiffScoreDropdown = ({ evaluation, onSave, onClose }) => {
+    const [evalData, setEvalData] = React.useState(evaluation);
+    const [position, setPosition] = React.useState({top: 0, left: 0});
+    const dropdownRef = React.useRef(null);
+    React.useEffect(() => {
+        setTimeout(() => {
+            const trigger = document.querySelector(`[data-dropdown-id="${evaluation.id}"]`);
+            if (trigger) {
+                const rect = trigger.getBoundingClientRect();
+                setPosition({
+                    top: rect.bottom + window.scrollY + 8,
+                    left: rect.right + window.scrollX - 270,
                 });
-            }, [settings]);
-
-            const handleDisplayChange = (key, value) => {
-                const sanitizedValue = value.replace(',', '.');
-                if (/^\d*\.?\d*$/.test(sanitizedValue)) {
-                    setDisplayValues(p => ({ ...p, [key]: sanitizedValue }));
-                }
-            };
-
-            const handleBlur = (key) => {
-                const numValue = parseFloat(displayValues[key]);
-                if (!isNaN(numValue)) {
-                    setSettings(p => ({ ...p, [key]: numValue }));
-                } else {
-                    setDisplayValues(p => ({ ...p, [key]: settings[key].toFixed(1) }));
-                }
-            };
-
-            const labels = { minGrade: 'Nota Mínima', passingGrade: 'Nota Aprobación', maxGrade: 'Nota Máxima' };
-            
-            return (
-                <div className="bg-white p-6 rounded-lg shadow-md">
-                    <h2 className="text-lg font-bold text-gray-700 mb-4">Configuración de Escala de Notas</h2>
-                    <div className="grid grid-cols-3 gap-4">
-                        {['minGrade', 'passingGrade', 'maxGrade'].map(k => (
-                            <div key={k}>
-                                <label className="block text-sm font-medium text-gray-500">{labels[k]}</label>
-                                <input 
-                                    type="text" 
-                                    value={displayValues[k]} 
-                                    onChange={e => handleDisplayChange(k, e.target.value)} 
-                                    onBlur={() => handleBlur(k)}
-                                    className="mt-1 w-full p-2 border rounded-md"/>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            );
+            }
+        }, 0);
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) onClose();
         };
-
-        const Tabs = ({ sheets, activeSheetId, onSelectTab, onDeleteTab, onRenameTab, onAddTab }) => {
-            const [editingId, setEditingId] = React.useState(null);
-            const [name, setName] = React.useState('');
-            const handleRename = (id) => { if (name.trim()) onRenameTab(id, name.trim()); setEditingId(null); };
-            return (
-                <div className="flex border-b border-gray-200">
-                    {sheets.map(s => (
-                        <div key={s.id} className={`tab flex items-center px-4 py-2 border-t border-l border-r rounded-t-lg cursor-pointer -mb-px ${activeSheetId === s.id ? 'active bg-white font-semibold' : 'bg-gray-200'}`} onClick={() => onSelectTab(s.id)} onDoubleClick={() => { setEditingId(s.id); setName(s.name); }}>
-                            {editingId === s.id ? <input type="text" value={name} onChange={e => setName(e.target.value)} onBlur={() => handleRename(s.id)} onKeyDown={e => e.key === 'Enter' && handleRename(s.id)} autoFocus className="bg-transparent"/> : <span>{s.name}</span>}
-                            <button onClick={e => { e.stopPropagation(); onDeleteTab(s.id); }} className="ml-3 text-gray-500 hover:text-red-600 tab-close-btn">&times;</button>
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [onClose, evaluation.id]);
+    if (!evalData) return null;
+    const handleToggle = () => setEvalData(prev => ({
+        ...prev,
+        differentiatedScores: { ...prev.differentiatedScores, enabled: !prev.differentiatedScores.enabled }
+    }));
+    const handleChange = (color, value) => {
+        const valueWithDot = value.replace(',', '.');
+        if (valueWithDot && isNaN(parseFloat(valueWithDot))) return;
+        const numValue = parseFloat(valueWithDot);
+        setEvalData(prev => ({
+            ...prev,
+            differentiatedScores: { ...prev.differentiatedScores, [color]: isNaN(numValue) ? '' : numValue }
+        }));
+    };
+    const dropdown = (
+        <div ref={dropdownRef}
+            className="fixed bg-white rounded-md shadow-lg z-[9999] p-4 border w-64"
+            style={{ top: position.top, left: position.left }}>
+            <div className="space-y-3">
+                <div className="flex items-center">
+                    <input type="checkbox" checked={evalData.differentiatedScores.enabled} onChange={handleToggle} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
+                    <label className="ml-2 block text-sm text-gray-900">Habilitar diferenciados</label>
+                </div>
+                {evalData.differentiatedScores.enabled && (
+                    <div className="space-y-2">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700">P. Máx. <span className="font-bold text-green-600">Verde</span></label>
+                            <input type="text" value={evalData.differentiatedScores.green} onChange={e => handleChange('green', e.target.value)} className="mt-1 block w-full px-2 py-1 border rounded-md text-sm"/>
                         </div>
-                    ))}
-                    <button onClick={onAddTab} className="px-4 py-2 bg-gray-200 rounded-t-lg hover:bg-gray-300">+</button>
-                </div>
-            );
-        };
-
-        const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
-            const [openDropdownEvalId, setOpenDropdownEvalId] = React.useState(null);
-            const dropdownTriggerRefs = React.useRef({});
-            const inputRefs = React.useRef({});
-
-            React.useEffect(() => {
-                // Limpia las referencias cuando la hoja o los datos cambian para evitar fugas de memoria.
-                inputRefs.current = {};
-                dropdownTriggerRefs.current = {};
-            }, [sheet.id, sheet.studentData.length, sheet.evaluations.length]);
-
-            const handleSaveDiffScores = (updatedEval) => {
-                const updatedEvals = sheet.evaluations.map(ev => ev.id === updatedEval.id ? updatedEval : ev);
-                onUpdateSheet({ ...sheet, evaluations: updatedEvals });
-            };
-
-            const update = (data) => onUpdateSheet({ ...sheet, ...data });
-            
-            const handleScoreChange = (r, e, v) => {
-                const valueWithDot = v.replace(',', '.');
-                if (valueWithDot !== '' && !/^\d*\.?\d*$/.test(valueWithDot)) return;
-
-                const student = sheet.studentData[r];
-                const evaluation = sheet.evaluations[e];
-                let maxScore = evaluation.maxScore;
-                if (evaluation.differentiatedScores.enabled && student.highlight) {
-                    maxScore = evaluation.differentiatedScores[student.highlight] || evaluation.maxScore;
-                }
-                
-                let score = valueWithDot === '' ? '' : parseFloat(valueWithDot);
-                if (score > maxScore) score = maxScore;
-
-                const d = [...sheet.studentData];
-                d[r].scores[e] = score;
-                update({ studentData: d });
-            };
-
-            const handleNameChange = (r, v) => { const d = [...sheet.studentData]; d[r].name = v; update({ studentData: d }); };
-            const handleHighlight = (r) => { const h = ['green','yellow','blue',null]; const d = [...sheet.studentData]; d[r].highlight = h[(h.indexOf(d[r].highlight) + 1) % 4]; update({ studentData: d }); };
-            
-            const handleEvalHeaderChange = (index, field, value) => {
-                const numValue = parseFloat(value.replace(',', '.'));
-                if (isNaN(numValue)) return;
-                const d = [...sheet.evaluations];
-                d[index][field] = numValue;
-                update({ evaluations: d });
-            };
-            
-            const handleEvalNameChange = (index, value) => {
-                const d = [...sheet.evaluations];
-                d[index].name = value;
-                update({ evaluations: d });
-            };
-
-            const delEval = (e) => update({ evaluations: sheet.evaluations.filter((_,i)=>i!==e), studentData: sheet.studentData.map(s=>({...s, scores: s.scores.filter((_,i)=>i!==e)})) });
-            const delStudent = (r) => update({ studentData: sheet.studentData.filter((_,i)=>i!==r) });
-
-            const handleKeyDown = (event, rowIndex, colIndex) => {
-                const { key } = event;
-                let nextRow = rowIndex;
-                let nextCol = colIndex;
-                let moved = false;
-
-                switch (key) {
-                    case 'ArrowUp': nextRow--; moved = true; break;
-                    case 'ArrowDown': nextRow++; moved = true; break;
-                    case 'Enter': 
-                        event.preventDefault();
-                        nextRow++; 
-                        moved = true; 
-                        break;
-                    case 'ArrowLeft': nextCol--; moved = true; break;
-                    case 'ArrowRight': nextCol++; moved = true; break;
-                    default: return;
-                }
-                
-                if (moved) {
-                    event.preventDefault();
-                    let targetRef;
-                    if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'Enter') {
-                        if (nextRow >= 0 && nextRow < sheet.studentData.length) {
-                             targetRef = inputRefs.current[`${nextRow}-${colIndex}`];
-                        }
-                    } else if (key === 'ArrowLeft' || key === 'ArrowRight') {
-                        if (nextCol >= 0 && nextCol < sheet.evaluations.length) {
-                            targetRef = inputRefs.current[`${rowIndex}-${nextCol}`];
-                        }
-                    }
-                    
-                    if (targetRef) {
-                        targetRef.focus();
-                        targetRef.select();
-                    }
-                }
-            };
-
-            const handleColumnResize = (e) => {
-                e.preventDefault();
-                const startX = e.clientX;
-                const startWidth = sheet.studentColumnWidth;
-
-                const handleMouseMove = (moveEvent) => {
-                    const newWidth = startWidth + (moveEvent.clientX - startX);
-                    if (newWidth > 100) { // Set a minimum width
-                        onUpdateSheet({ ...sheet, studentColumnWidth: newWidth });
-                    }
-                };
-
-                const handleMouseUp = () => {
-                    window.removeEventListener('mousemove', handleMouseMove);
-                    window.removeEventListener('mouseup', handleMouseUp);
-                };
-
-                window.addEventListener('mousemove', handleMouseMove);
-                window.addEventListener('mouseup', handleMouseUp);
-            };
-
-            return (
-                <div className="bg-white p-2 sm:p-4 rounded-b-lg shadow-md flex">
-                    {/* Fixed Columns */}
-                    <div className="relative">
-                        <table className="table-fixed border-separate" style={{ borderSpacing: 0 }}>
-                            <thead className="bg-gray-50">
-                                <tr className="h-16">
-                                    <th rowSpan="3" className="p-3 w-12 text-left text-xs font-medium text-gray-500 border-b-2">#</th>
-                                    <th 
-                                        style={{ width: `${sheet.studentColumnWidth}px`}}
-                                        rowSpan="3" 
-                                        className="p-3 text-left text-xs font-medium text-gray-500 border-b-2 relative"
-                                    >
-                                        {sheet.studentHeader}
-                                        <div className="resize-handle" onMouseDown={handleColumnResize}></div>
-                                    </th>
-                                </tr>
-                                <tr className="h-10"></tr>
-                                <tr className="h-10"></tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {sheet.studentData.map((s, r) => (
-                                    <tr key={s.id} className={`group h-14 ${s.highlight ? `highlight-${s.highlight}`:''}`}>
-                                        <td className="p-4 text-sm relative text-center">
-                                            {r+1}
-                                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={()=>delStudent(r)} className="p-1 bg-white rounded shadow hover:bg-red-100">
-                                                    <span className="text-red-500 font-bold">×</span>
-                                                </button>
-                                            </div>
-                                        </td>
-                                        <td className="p-1 text-sm">
-                                            <div className="flex items-center">
-                                                <input type="text" value={s.name} onChange={e => handleNameChange(r, e.target.value)} className="bg-transparent w-full focus:bg-yellow-100 p-2 rounded"/>
-                                                <button onClick={() => handleHighlight(r)} className="ml-2 text-xl text-gray-500 hover:text-blue-600" title="Cambiar color">🎨</button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                    {/* Scrollable Columns */}
-                    <div className="overflow-x-auto flex-grow">
-                        <table className="min-w-full border-separate" style={{ borderSpacing: 0 }}>
-                            <thead className="bg-gray-50">
-                                <tr className="h-16">
-                                    {sheet.evaluations.map((ev, i) => (
-                                        <th key={ev.id} colSpan="2" className="p-3 text-center text-xs font-medium text-gray-500 relative group">
-                                            <div className="flex justify-center items-center">
-                                                <input type="text" value={ev.name} onChange={e => handleEvalNameChange(i, e.target.value)} className="font-bold text-base bg-transparent w-full text-center focus:bg-yellow-100 px-1 rounded"/>
-                                                <div className="relative">
-                                                    <button ref={el => dropdownTriggerRefs.current[ev.id] = el} onClick={() => setOpenDropdownEvalId(openDropdownEvalId === ev.id ? null : ev.id)} className="ml-2 text-lg text-gray-500 hover:text-blue-600">⚙️</button>
-                                                    {openDropdownEvalId === ev.id && <DiffScoreDropdown evaluation={ev} onSave={handleSaveDiffScores} onClose={() => setOpenDropdownEvalId(null)} triggerRef={{ current: dropdownTriggerRefs.current[ev.id] }} />}
-                                                </div>
-                                                <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button onClick={() => delEval(i)} className="p-1 bg-white rounded shadow hover:bg-red-100">
-                                                        <span className="text-red-500 font-bold">×</span>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </th>
-                                    ))}
-                                    <th rowSpan="3" className="p-3 w-28 text-center text-xs font-medium text-gray-500 bg-green-50 border-b-2">Promedio</th>
-                                </tr>
-                                <tr className="h-10">
-                                    {sheet.evaluations.map((ev, i) => <th key={ev.id} colSpan="2" className="p-1"><div className="flex justify-center items-center space-x-2"><label className="text-xs">P.Máx:</label><input type="text" value={ev.maxScore} onChange={e => handleEvalHeaderChange(i, 'maxScore', e.target.value)} className="w-16 p-1 text-xs border rounded" /><label className="text-xs">Exig:</label><input type="number" value={ev.exigency} onChange={e => handleEvalHeaderChange(i, 'exigency', e.target.value)} className="w-16 p-1 text-xs border rounded"/></div></th>)}
-                                </tr>
-                                <tr className="h-10">{sheet.evaluations.map((ev) => <React.Fragment key={ev.id}><th className="border-t border-b-2 p-1 w-24 text-xs font-medium text-gray-500">Puntaje</th><th className="border-t border-b-2 p-1 w-24 bg-blue-50 text-xs font-medium">Nota</th></React.Fragment>)}</tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {sheet.studentData.map((s, r) => {
-                                    let total = 0, count = 0;
-                                    const grades = sheet.evaluations.map((ev, e) => {
-                                        let maxScore = ev.maxScore;
-                                        if (ev.differentiatedScores.enabled && s.highlight) {
-                                            maxScore = ev.differentiatedScores[s.highlight] || ev.maxScore;
-                                        }
-                                        const g = calculateGrade(s.scores[e], maxScore, ev.exigency, globalSettings);
-                                        if (!isNaN(g)) { total += g; count++; }
-                                        return g;
-                                    });
-                                    const avg = count > 0 ? (total / count) : NaN;
-                                    return (
-                                        <tr key={s.id} className={`group h-14 ${s.highlight ? `highlight-${s.highlight}`:''}`}>
-                                            {sheet.evaluations.map((ev, e) => <React.Fragment key={ev.id}><td className="p-1 text-sm text-center"><input type="text" pattern="[0-9]*[.,]?[0-9]*" value={s.scores[e] ?? ''} onChange={evt => handleScoreChange(r, e, evt.target.value)} onKeyDown={evt => handleKeyDown(evt, r, e)} ref={el => inputRefs.current[`${r}-${e}`] = el} className="w-24 text-center bg-gray-50 rounded focus:bg-yellow-100 p-2"/></td><td className={`p-1 text-sm text-center font-bold ${!isNaN(grades[e]) && (grades[e] >= globalSettings.passingGrade ? 'grade-pass' : 'grade-fail')}`}>{isNaN(grades[e]) ? 'N/A' : grades[e].toFixed(1)}</td></React.Fragment>)}
-                                            <td className={`p-4 text-sm text-center font-bold bg-green-50 ${!isNaN(avg) && (avg >= globalSettings.passingGrade ? 'grade-pass' : 'grade-fail')}`}>{isNaN(avg) ? 'N/A' : avg.toFixed(1)}</td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            );
-        };
-        
-        const AppContext = React.createContext();
-
-        function App() {
-            const defaultState = {
-                sheets: [],
-                activeSheetId: null,
-                globalSettings: { minGrade: 1.0, passingGrade: 4.0, maxGrade: 7.0 }
-            };
-            
-            const getInitialState = () => {
-                const loadedState = loadStateFromLocalStorage();
-                if (loadedState) {
-                    const sheetsWithWidth = (loadedState.sheets || []).map(sheet => ({
-                        ...sheet,
-                        studentColumnWidth: sheet.studentColumnWidth || 200
-                    }));
-                    return {
-                        ...defaultState,
-                        ...loadedState,
-                        sheets: sheetsWithWidth,
-                        globalSettings: {
-                            ...defaultState.globalSettings,
-                            ...(loadedState.globalSettings || {})
-                        }
-                    };
-                }
-                return defaultState;
-            };
-
-            const [sheets, setSheets] = React.useState(getInitialState().sheets);
-            const [activeSheetId, setActiveSheetId] = React.useState(getInitialState().activeSheetId);
-            const [globalSettings, setGlobalSettings] = React.useState(getInitialState().globalSettings);
-
-            React.useEffect(() => {
-                const stateToSave = { sheets, activeSheetId, globalSettings };
-                saveStateToLocalStorage(stateToSave);
-            }, [sheets, activeSheetId, globalSettings]);
-
-            const handleUpdateSheet = React.useCallback(u => setSheets(p => p.map(s => s.id === u.id ? u : s)), []);
-            const handleCreateSheet = React.useCallback(() => {
-                const name = `Hoja ${sheets.length + 1}`;
-                const newSheet = { id: generateId(), name, studentHeader: 'Alumnos', evaluations: [], studentData: [], studentColumnWidth: 200 };
-                setSheets(p => [...p, newSheet]);
-                setActiveSheetId(newSheet.id);
-            }, [sheets.length]);
-            const handleDeleteSheet = React.useCallback(id => {
-                setSheets(p => {
-                    const n = p.filter(s => s.id !== id);
-                    if (activeSheetId === id) setActiveSheetId(n[0]?.id || null);
-                    return n;
-                });
-            }, [activeSheetId]);
-            const handleRenameSheet = React.useCallback((id, name) => setSheets(p => p.map(s => s.id === id ? { ...s, name } : s)), []);
-            
-            const activeSheet = React.useMemo(() => sheets.find(s => s.id === activeSheetId), [sheets, activeSheetId]);
-
-            const handleAddEvaluation = (evalData) => {
-                if (!activeSheet) return;
-                const newEvaluation = { 
-                    ...evalData, 
-                    id: generateId(),
-                    differentiatedScores: { enabled: false, green: evalData.maxScore, yellow: evalData.maxScore, blue: evalData.maxScore }
-                };
-                const updatedSheet = {
-                    ...activeSheet,
-                    evaluations: [...activeSheet.evaluations, newEvaluation],
-                    studentData: activeSheet.studentData.map(s => ({ ...s, scores: [...s.scores, null] }))
-                };
-                handleUpdateSheet(updatedSheet);
-            };
-
-            const handleAddStudent = () => {
-                if (!activeSheet) return;
-                const newStudent = {
-                    id: generateId(),
-                    name: `Estudiante ${activeSheet.studentData.length + 1}`,
-                    scores: Array(activeSheet.evaluations.length).fill(null),
-                    highlight: null
-                };
-                handleUpdateSheet({ ...activeSheet, studentData: [...activeSheet.studentData, newStudent] });
-            };
-
-            const handleFileImport = (file) => {
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const importedSheets = workbook.SheetNames.map(name => {
-                        const ws = workbook.Sheets[name];
-                        const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-                        
-                        if (json.length < 5 || json[4][1] !== 'Alumnos') {
-                            console.error("El formato del archivo Excel no es válido.");
-                            return null;
-                        }
-
-                        const studentHeader = json[4][1];
-                        const highlightColIndex = json[4].findIndex(h => h === 'Highlight');
-                        
-                        const evaluations = [];
-                        for(let i=2; i < json[0].length; i+=2) {
-                            if(!json[0][i]) continue;
-                            const diffScoresRaw = json[3][i+1] ? json[3][i+1].split(',') : [];
-                            evaluations.push({
-                                id: generateId(),
-                                name: json[0][i],
-                                maxScore: parseFloat(json[1][i] || 0),
-                                exigency: parseFloat(json[2][i] || 0),
-                                differentiatedScores: {
-                                    enabled: json[3][i] === 'SI',
-                                    green: parseFloat(diffScoresRaw[0] || json[1][i] || 0),
-                                    yellow: parseFloat(diffScoresRaw[1] || json[1][i] || 0),
-                                    blue: parseFloat(diffScoresRaw[2] || json[1][i] || 0),
-                                }
-                            });
-                        }
-                        
-                        const studentData = json.slice(5).map(r => ({ 
-                            id: generateId(), 
-                            name: r[1], 
-                            scores: evaluations.map((_, j) => r[2 + j * 2]), 
-                            highlight: highlightColIndex !== -1 ? (r[highlightColIndex] || null) : null
-                        }));
-
-                        return { id: generateId(), name, studentHeader, evaluations, studentData, studentColumnWidth: 200 };
-                    }).filter(Boolean);
-
-                    setSheets(prev => [...prev, ...importedSheets]);
-                    if (importedSheets.length > 0) {
-                        setActiveSheetId(importedSheets[0].id);
-                    }
-                };
-                reader.readAsArrayBuffer(file);
-            };
-            
-            const handleExport = () => {
-                const wb = XLSX.utils.book_new();
-                sheets.forEach(sheet => {
-                    const h1 = ['', '', ...sheet.evaluations.flatMap(ev => [ev.name, ''])];
-                    const h2 = ['', 'P. Máx:', ...sheet.evaluations.flatMap(ev => [ev.maxScore, ''])];
-                    const h3 = ['', 'Exig:', ...sheet.evaluations.flatMap(ev => [ev.exigency, ''])];
-                    const h4 = ['Puntajes Diferenciados', '', ...sheet.evaluations.flatMap(ev => [ev.differentiatedScores.enabled ? 'SI':'NO', `${ev.differentiatedScores.green},${ev.differentiatedScores.yellow},${ev.differentiatedScores.blue}`])];
-                    const subH = ['#', sheet.studentHeader, ...sheet.evaluations.flatMap(() => ['Puntaje', 'Nota']), 'Promedio Final', 'Highlight'];
-                    const aoa = [h1, h2, h3, h4, subH];
-
-                    sheet.studentData.forEach((student, index) => {
-                        const row = [index + 1, student.name];
-                        let total = 0, count = 0;
-                        sheet.evaluations.forEach((ev, i) => {
-                            let maxScore = ev.maxScore;
-                            if (ev.differentiatedScores.enabled && student.highlight) {
-                                maxScore = ev.differentiatedScores[student.highlight] || ev.maxScore;
-                            }
-                            const grade = calculateGrade(student.scores[i], maxScore, ev.exigency, globalSettings);
-                            row.push(student.scores[i] ?? '', isNaN(grade) ? '' : grade.toFixed(1));
-                            if (!isNaN(grade)) { total += grade; count++; }
-                        });
-                        const avg = count > 0 ? (total / count) : NaN;
-                        row.push(isNaN(avg) ? '' : avg.toFixed(1));
-                        row.push(student.highlight || '');
-                        aoa.push(row);
-                    });
-
-                    const ws = XLSX.utils.aoa_to_sheet(aoa);
-                    XLSX.utils.book_append_sheet(wb, ws, sheet.name);
-                });
-                XLSX.writeFile(wb, 'calculadora_notas.xlsx');
-            };
-
-            return (
-                <AppContext.Provider value={{ activeSheetId }}>
-                    <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-screen">
-                        <Header 
-                            activeSheet={activeSheet} 
-                            onAddEvaluation={handleAddEvaluation}
-                            onAddStudent={handleAddStudent}
-                            onFileImport={handleFileImport}
-                            onExport={handleExport}
-                            sheetsCount={sheets.length}
-                        />
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                            <div className="bg-white p-6 rounded-lg shadow-md">
-                                <h2 className="text-lg font-bold text-gray-700 mb-4">Cargar Archivo</h2>
-                                <p className="text-sm text-gray-500">Usa el botón "Importar" para cargar un archivo Excel (.xlsx).</p>
-                            </div>
-                            <GlobalSettings settings={globalSettings} setSettings={setGlobalSettings} />
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700">P. Máx. <span className="font-bold text-yellow-600">Amarillo</span></label>
+                            <input type="text" value={evalData.differentiatedScores.yellow} onChange={e => handleChange('yellow', e.target.value)} className="mt-1 block w-full px-2 py-1 border rounded-md text-sm"/>
                         </div>
-                        {sheets.length > 0 && activeSheetId ? (
-                            <div>
-                                <Tabs sheets={sheets} activeSheetId={activeSheetId} onSelectTab={setActiveSheetId} onDeleteTab={handleDeleteSheet} onRenameTab={handleRenameSheet} onAddTab={handleCreateSheet} />
-                                <GradesTable key={activeSheetId} sheet={sheets.find(s => s.id === activeSheetId)} onUpdateSheet={handleUpdateSheet} globalSettings={globalSettings} />
-                            </div>
-                        ) : (
-                            <Placeholder onStartManual={handleCreateSheet} />
-                        )}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700">P. Máx. <span className="font-bold text-blue-600">Azul</span></label>
+                            <input type="text" value={evalData.differentiatedScores.blue} onChange={e => handleChange('blue', e.target.value)} className="mt-1 block w-full px-2 py-1 border rounded-md text-sm"/>
+                        </div>
                     </div>
-                </AppContext.Provider>
-            );
+                )}
+                <div className="flex justify-end pt-2">
+                    <button onClick={() => { onSave(evalData); onClose(); }} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Guardar</button>
+                </div>
+            </div>
+        </div>
+    );
+    return ReactDOM.createPortal(dropdown, document.getElementById('portal-root'));
+};
+const Placeholder = ({ onStartManual }) => (
+    <div className="text-center bg-white p-10 rounded-lg shadow-md">
+        <h2 className="text-2xl font-bold text-gray-700 mb-4">Comienza a Calcular Notas</h2>
+        <p className="text-gray-500 mb-6">Puedes importar un archivo de Excel o crear una tabla manualmente.</p>
+        <button onClick={onStartManual} className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700">
+            Crear Tabla Manualmente
+        </button>
+    </div>
+);
+const Header = ({ activeSheet, onAddEvaluation, onAddStudent, onFileImport, onExport, sheetsCount }) => {
+    const [isAddEvalDropdownOpen, setAddEvalDropdownOpen] = React.useState(false);
+    const fileInputRef = React.useRef(null);
+    const handleFileChange = (event) => {
+        const file = event.target.files[0];
+        if (file) onFileImport(file);
+        event.target.value = '';
+    };
+    return (
+        <div className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b-2 border-gray-200">
+            <h1 className="text-3xl font-bold text-gray-800">Calculadora de Notas</h1>
+            <div className="flex items-center space-x-2 mt-4 sm:mt-0">
+                <div className="relative">
+                    <button onClick={() => setAddEvalDropdownOpen(prev => !prev)} disabled={!activeSheet} className="px-4 py-2 bg-green-500 text-white rounded-md shadow-sm hover:bg-green-600 disabled:bg-gray-300">Añadir Evaluación</button>
+                    {isAddEvalDropdownOpen && <AddEvalDropdown onAdd={onAddEvaluation} onClose={() => setAddEvalDropdownOpen(false)} />}
+                </div>
+                <button onClick={onAddStudent} disabled={!activeSheet} className="px-4 py-2 bg-blue-500 text-white rounded-md shadow-sm hover:bg-blue-600 disabled:bg-gray-300">Añadir Alumno</button>
+                <button onClick={() => fileInputRef.current.click()} className="px-4 py-2 bg-gray-700 text-white rounded-md shadow-sm hover:bg-gray-800">Importar</button>
+                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+                <button onClick={onExport} disabled={sheetsCount === 0} className="px-4 py-2 bg-orange-500 text-white rounded-md shadow-sm hover:bg-orange-600 disabled:bg-gray-300">Exportar</button>
+            </div>
+        </div>
+    );
+};
+const GlobalSettings = ({ settings, setSettings }) => {
+    const [displayValues, setDisplayValues] = React.useState({
+        minGrade: settings.minGrade.toFixed(1),
+        passingGrade: settings.passingGrade.toFixed(1),
+        maxGrade: settings.maxGrade.toFixed(1)
+    });
+    React.useEffect(() => {
+        setDisplayValues({
+            minGrade: settings.minGrade.toFixed(1),
+            passingGrade: settings.passingGrade.toFixed(1),
+            maxGrade: settings.maxGrade.toFixed(1)
+        });
+    }, [settings]);
+    const handleDisplayChange = (key, value) => {
+        const sanitizedValue = value.replace(',', '.');
+        if (sanitizedValue === '' || !isNaN(parseFloat(sanitizedValue))) {
+            setDisplayValues(p => ({ ...p, [key]: sanitizedValue }));
+        }
+    };
+    const handleBlur = (key) => {
+        let numValue = parseFloat(displayValues[key]);
+        if (isNaN(numValue)) numValue = settings[key];
+        setSettings(p => ({ ...p, [key]: numValue }));
+    };
+    const labels = { minGrade: 'Nota Mínima', passingGrade: 'Nota Aprobación', maxGrade: 'Nota Máxima' };
+    return (
+        <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-lg font-bold text-gray-700 mb-4">Configuración de Escala de Notas</h2>
+            <div className="grid grid-cols-3 gap-4">
+                {['minGrade', 'passingGrade', 'maxGrade'].map(k => (
+                    <div key={k}>
+                        <label className="block text-sm font-medium text-gray-500">{labels[k]}</label>
+                        <input 
+                            type="text" 
+                            value={displayValues[k]} 
+                            onChange={e => handleDisplayChange(k, e.target.value)} 
+                            onBlur={() => handleBlur(k)}
+                            className="mt-1 w-full p-2 border rounded-md"/>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+const Tabs = ({ sheets, activeSheetId, onSelectTab, onDeleteTab, onRenameTab, onAddTab }) => {
+    const [editingId, setEditingId] = React.useState(null);
+    const [name, setName] = React.useState('');
+    const handleRename = (id) => { if (name.trim()) onRenameTab(id, name.trim()); setEditingId(null); };
+    return (
+        <div className="flex border-b border-gray-200">
+            {sheets.map(s => (
+                <div
+                    key={s.id}
+                    className={`tab flex items-center px-4 py-2 border-t border-l border-r rounded-t-lg cursor-pointer -mb-px ${activeSheetId === s.id ? 'active bg-white font-semibold' : 'bg-gray-200'}`}
+                    onClick={() => onSelectTab(s.id)}
+                    onDoubleClick={() => { setEditingId(s.id); setName(s.name); }}
+                >
+                    {editingId === s.id
+                        ? <input type="text" value={name} onChange={e => setName(e.target.value)} onBlur={() => handleRename(s.id)} onKeyDown={e => e.key === 'Enter' && handleRename(s.id)} autoFocus className="bg-transparent"/>
+                        : <span>{s.name}</span>}
+                    <button onClick={e => { e.stopPropagation(); onDeleteTab(s.id); }} className="ml-3 text-gray-500 hover:text-red-600 tab-close-btn">&times;</button>
+                </div>
+            ))}
+            <button onClick={onAddTab} className="px-4 py-2 bg-gray-200 rounded-t-lg hover:bg-gray-300">+</button>
+        </div>
+    );
+};
+const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
+    const [openDropdownEvalId, setOpenDropdownEvalId] = React.useState(null);
+    const inputRefs = React.useRef({});
+    const handleSaveDiffScores = (updatedEval) => {
+        const updatedEvals = sheet.evaluations.map(ev => ev.id === updatedEval.id ? updatedEval : ev);
+        onUpdateSheet({ ...sheet, evaluations: updatedEvals });
+    };
+    const update = (data) => onUpdateSheet({ ...sheet, ...data });
+    
+    // MODIFIED: This function now only updates the state while typing.
+    const handleScoreChange = (r, e, v) => {
+        const valueWithDot = v.replace(',', '.');
+        // Allows typing numbers, and a single dot/comma. Prevents other characters.
+        if (valueWithDot !== '' && !/^\d*\.?\d*$/.test(valueWithDot)) {
+             return;
+        }
+        const d = [...sheet.studentData];
+        d[r].scores[e] = valueWithDot; // Keep as a string to allow inputs like "5."
+        update({ studentData: d });
+    };
+
+    // NEW: This function validates and caps the score when you leave the input field.
+    const handleScoreBlur = (r, e) => {
+        const student = sheet.studentData[r];
+        const evaluation = sheet.evaluations[e];
+        let score = student.scores[e];
+
+        // Convert to number
+        let numericScore = parseFloat(String(score).replace(',', '.'));
+        if (isNaN(numericScore)) {
+            numericScore = ''; // Clear if invalid (e.g., just a ".")
         }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        // Check against max score
+        let maxScore = evaluation.maxScore;
+        if (evaluation.differentiatedScores.enabled && student.highlight) {
+            maxScore = evaluation.differentiatedScores[student.highlight] || evaluation.maxScore;
+        }
 
-    </script>
+        if (numericScore > maxScore) {
+            numericScore = maxScore;
+        }
+
+        const d = [...sheet.studentData];
+        d[r].scores[e] = numericScore;
+        update({ studentData: d });
+    };
+
+    const handleNameChange = (r, v) => { const d = [...sheet.studentData]; d[r].name = v; update({ studentData: d }); };
+    const handleHighlight = (r) => { const h = ['green','yellow','blue',null]; const d = [...sheet.studentData]; d[r].highlight = h[(h.indexOf(d[r].highlight) + 1) % 4]; update({ studentData: d }); };
+    const handleEvalHeaderChange = (index, field, value) => {
+        const valueWithDot = value.replace(',', '.');
+        if (valueWithDot && isNaN(parseFloat(valueWithDot))) return;
+        const numValue = valueWithDot === '' ? 0 : parseFloat(valueWithDot);
+        const d = [...sheet.evaluations];
+        d[index][field] = numValue;
+        update({ evaluations: d });
+    };
+    const handleEvalNameChange = (index, value) => {
+        const d = [...sheet.evaluations];
+        d[index].name = value;
+        update({ evaluations: d });
+    };
+    const delEval = (e) => update({ evaluations: sheet.evaluations.filter((_,i)=>i!==e), studentData: sheet.studentData.map(s=>({...s, scores: s.scores.filter((_,i)=>i!==e)})) });
+    const delStudent = (r) => update({ studentData: sheet.studentData.filter((_,i)=>i!==r) });
+    const handleKeyDown = (event, rowIndex, colIndex) => {
+        const { key } = event;
+        let nextRow = rowIndex, nextCol = colIndex, moved = false;
+        switch (key) {
+            case 'ArrowUp': nextRow--; moved = true; break;
+            case 'ArrowDown': nextRow++; moved = true; break;
+            case 'Enter': event.preventDefault(); nextRow++; moved = true; break;
+            case 'ArrowLeft': nextCol--; moved = true; break;
+            case 'ArrowRight': nextCol++; moved = true; break;
+            default: return;
+        }
+        if (moved) {
+            event.preventDefault();
+            let targetRef;
+            if (['ArrowUp','ArrowDown','Enter'].includes(key) && nextRow >= 0 && nextRow < sheet.studentData.length)
+                targetRef = inputRefs.current[`${nextRow}-${colIndex}`];
+            else if ((key === 'ArrowLeft' || key === 'ArrowRight') && nextCol >= 0 && nextCol < sheet.evaluations.length)
+                targetRef = inputRefs.current[`${rowIndex}-${nextCol}`];
+            if (targetRef) { targetRef.focus(); targetRef.select(); }
+        }
+    };
+    const handleColumnResize = (e) => {
+        e.preventDefault();
+        const startX = e.clientX, startWidth = sheet.studentColumnWidth;
+        const handleMouseMove = (moveEvent) => {
+            const newWidth = startWidth + (moveEvent.clientX - startX);
+            if (newWidth > 100) onUpdateSheet({ ...sheet, studentColumnWidth: newWidth });
+        };
+        const handleMouseUp = () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+    };
+    return (
+        <div className="bg-white p-2 sm:p-4 rounded-b-lg shadow-md flex">
+            <div className="relative">
+                <table className="table-fixed border-separate" style={{ borderSpacing: 0 }}>
+                    <thead className="bg-gray-50">
+                        <tr className="h-16">
+                            <th rowSpan="3" className="p-3 w-12 text-left text-xs font-medium text-gray-500 border-b-2">#</th>
+                            <th style={{ width: `${sheet.studentColumnWidth}px`}} rowSpan="3" className="p-3 text-left text-xs font-medium text-gray-500 border-b-2 relative">
+                                {sheet.studentHeader}
+                                <div className="resize-handle" onMouseDown={handleColumnResize}></div>
+                            </th>
+                        </tr>
+                        <tr className="h-10"></tr>
+                        <tr className="h-10"></tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {sheet.studentData.map((s, r) => (
+                            <tr key={s.id} className={`group h-14 ${s.highlight ? `highlight-${s.highlight}`:''}`}>
+                                <td className="p-4 text-sm relative text-center">
+                                    {r+1}
+                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={()=>delStudent(r)} className="p-1 bg-white rounded shadow hover:bg-red-100">
+                                            <span className="text-red-500 font-bold">×</span>
+                                        </button>
+                                    </div>
+                                </td>
+                                <td className="p-1 text-sm">
+                                    <div className="flex items-center">
+                                        <input type="text" value={s.name} onChange={e => handleNameChange(r, e.target.value)} className="bg-transparent w-full focus:bg-yellow-100 p-2 rounded"/>
+                                        <button onClick={() => handleHighlight(r)} className="ml-2 text-xl text-gray-500 hover:text-blue-600" title="Cambiar color">🎨</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <div className="overflow-x-auto flex-grow">
+                <table className="min-w-full border-separate" style={{ borderSpacing: 0 }}>
+                    <thead className="bg-gray-50">
+                        <tr className="h-16">
+                            {sheet.evaluations.map((ev, i) => (
+                                <th key={ev.id} colSpan="2" className="p-3 text-center text-xs font-medium text-gray-500 relative group">
+                                    <div className="flex justify-center items-center">
+                                        <input type="text" value={ev.name} onChange={e => handleEvalNameChange(i, e.target.value)} className="font-bold text-base bg-transparent w-full text-center focus:bg-yellow-100 px-1 rounded"/>
+                                        <div className="relative">
+                                            <button aria-label="Configuración evaluación"
+                                                data-dropdown-id={ev.id}
+                                                onClick={() => setOpenDropdownEvalId(openDropdownEvalId === ev.id ? null : ev.id)}
+                                                className="ml-2 text-lg text-gray-500 hover:text-blue-600">⚙️</button>
+                                            {openDropdownEvalId === ev.id && <DiffScoreDropdown evaluation={ev} onSave={handleSaveDiffScores} onClose={() => setOpenDropdownEvalId(null)} />}
+                                        </div>
+                                        <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => delEval(i)} className="p-1 bg-white rounded shadow hover:bg-red-100">
+                                                <span className="text-red-500 font-bold">×</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </th>
+                            ))}
+                            <th rowSpan="3" className="p-3 w-28 text-center text-xs font-medium text-gray-500 bg-green-50 border-b-2">Promedio</th>
+                        </tr>
+                        <tr className="h-10">
+                            {sheet.evaluations.map((ev, i) =>
+                                <th key={ev.id} colSpan="2" className="p-1">
+                                    <div className="flex justify-center items-center space-x-2">
+                                        <label className="text-xs">P.Máx:</label>
+                                        <input type="text" value={ev.maxScore} onChange={e => handleEvalHeaderChange(i, 'maxScore', e.target.value)} className="w-16 p-1 text-xs border rounded" />
+                                        <label className="text-xs">Exig:</label>
+                                        <input type="text" value={ev.exigency} onChange={e => handleEvalHeaderChange(i, 'exigency', e.target.value)} className="w-16 p-1 text-xs border rounded"/>
+                                    </div>
+                                </th>)}
+                        </tr>
+                        <tr className="h-10">
+                            {sheet.evaluations.map((ev) => <React.Fragment key={ev.id}>
+                                <th className="border-t border-b-2 p-1 w-24 text-xs font-medium text-gray-500">Puntaje</th>
+                                <th className="border-t border-b-2 p-1 w-24 bg-blue-50 text-xs font-medium">Nota</th>
+                            </React.Fragment>)}
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {sheet.studentData.map((s, r) => {
+                            let total = 0, count = 0;
+                            const grades = sheet.evaluations.map((ev, e) => {
+                                let maxScore = ev.maxScore;
+                                if (ev.differentiatedScores.enabled && s.highlight) {
+                                    maxScore = ev.differentiatedScores[s.highlight] || ev.maxScore;
+                                }
+                                const g = calculateGrade(s.scores[e], maxScore, ev.exigency, globalSettings);
+                                if (!isNaN(g)) { total += g; count++; }
+                                return g;
+                            });
+                            const avg = count > 0 ? (total / count) : NaN;
+                            return (
+                                <tr key={s.id} className={`group h-14 ${s.highlight ? `highlight-${s.highlight}`:''}`}>
+                                    {sheet.evaluations.map((ev, e) =>
+                                        <React.Fragment key={ev.id}>
+                                            <td className="p-1 text-sm text-center">
+                                                {/* MODIFIED: Added onBlur event handler */}
+                                                <input type="text" value={s.scores[e] ?? ''} onChange={evt => handleScoreChange(r, e, evt.target.value)} onBlur={() => handleScoreBlur(r, e)} onKeyDown={evt => handleKeyDown(evt, r, e)} ref={el => inputRefs.current[`${r}-${e}`] = el} className="w-24 text-center bg-gray-50 rounded focus:bg-yellow-100 p-2"/>
+                                            </td>
+                                            <td className={`p-1 text-sm text-center font-bold ${!isNaN(grades[e]) && (grades[e] >= globalSettings.passingGrade ? 'grade-pass' : 'grade-fail')}`}>{isNaN(grades[e]) ? 'N/A' : grades[e].toFixed(1)}</td>
+                                        </React.Fragment>
+                                    )}
+                                    <td className={`p-4 text-sm text-center font-bold bg-green-50 ${!isNaN(avg) && (avg >= globalSettings.passingGrade ? 'grade-pass' : 'grade-fail')}`}>{isNaN(avg) ? 'N/A' : avg.toFixed(1)}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
+const App = () => {
+    const defaultState = {
+        sheets: [],
+        activeSheetId: null,
+        globalSettings: { minGrade: 1.0, passingGrade: 4.0, maxGrade: 7.0 }
+    };
+    const getInitialState = () => {
+        const loadedState = loadStateFromLocalStorage();
+        if (loadedState) {
+            const sheetsWithWidth = (loadedState.sheets || []).map(sheet => ({
+                ...sheet,
+                studentColumnWidth: sheet.studentColumnWidth || 200
+            }));
+            return {
+                ...defaultState,
+                ...loadedState,
+                sheets: sheetsWithWidth,
+                globalSettings: {
+                    ...defaultState.globalSettings,
+                    ...(loadedState.globalSettings || {})
+                }
+            };
+        }
+        return defaultState;
+    };
+    const [sheets, setSheets] = React.useState(getInitialState().sheets);
+    const [activeSheetId, setActiveSheetId] = React.useState(getInitialState().activeSheetId);
+    const [globalSettings, setGlobalSettings] = React.useState(getInitialState().globalSettings);
+    React.useEffect(() => {
+        const stateToSave = { sheets, activeSheetId, globalSettings };
+        saveStateToLocalStorage(stateToSave);
+    }, [sheets, activeSheetId, globalSettings]);
+    const handleUpdateSheet = React.useCallback(u => setSheets(p => p.map(s => s.id === u.id ? u : s)), []);
+    const handleCreateSheet = React.useCallback(() => {
+        const name = `Hoja ${sheets.length + 1}`;
+        const newSheet = { id: generateId(), name, studentHeader: 'Alumnos', evaluations: [], studentData: [], studentColumnWidth: 200 };
+        setSheets(p => [...p, newSheet]);
+        setActiveSheetId(newSheet.id);
+    }, [sheets.length]);
+    const handleDeleteSheet = React.useCallback(id => {
+        setSheets(p => {
+            const n = p.filter(s => s.id !== id);
+            if (activeSheetId === id) setActiveSheetId(n[0]?.id || null);
+            return n;
+        });
+    }, [activeSheetId]);
+    const handleRenameSheet = React.useCallback((id, name) => setSheets(p => p.map(s => s.id === id ? { ...s, name } : s)), []);
+    const activeSheet = React.useMemo(() => sheets.find(s => s.id === activeSheetId), [sheets, activeSheetId]);
+    const handleAddEvaluation = (evalData) => {
+        if (!activeSheet) return;
+        const newEvaluation = {
+            ...evalData,
+            id: generateId(),
+            differentiatedScores: { enabled: false, green: evalData.maxScore, yellow: evalData.maxScore, blue: evalData.maxScore }
+        };
+        const updatedSheet = {
+            ...activeSheet,
+            evaluations: [...activeSheet.evaluations, newEvaluation],
+            studentData: activeSheet.studentData.map(s => ({ ...s, scores: [...s.scores, ''] }))
+        };
+        handleUpdateSheet(updatedSheet);
+    };
+    const handleAddStudent = () => {
+        if (!activeSheet) return;
+        const newStudent = {
+            id: generateId(),
+            name: `Estudiante ${activeSheet.studentData.length + 1}`,
+            scores: Array(activeSheet.evaluations.length).fill(''),
+            highlight: null
+        };
+        handleUpdateSheet({ ...activeSheet, studentData: [...activeSheet.studentData, newStudent] });
+    };
+    const handleFileImport = (file) => {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const importedSheets = workbook.SheetNames.map(name => {
+                const ws = workbook.Sheets[name];
+                const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+                if (json.length < 5) return null;
+                const studentHeader = json[4][1];
+                const highlightColIndex = json[4].findIndex(h => h === 'Highlight');
+                const evaluations = [];
+                for(let i=2; i < json[0].length; i+=2) {
+                    if(!json[0][i]) continue;
+                    const diffScoresRaw = json[3][i+1] ? json[3][i+1].split(',') : [];
+                    evaluations.push({
+                        id: generateId(),
+                        name: json[0][i],
+                        maxScore: parseFloat(json[1][i] || 0),
+                        exigency: parseFloat(json[2][i] || 0),
+                        differentiatedScores: {
+                            enabled: json[3][i] === 'SI',
+                            green: parseFloat(diffScoresRaw[0] || json[1][i] || 0),
+                            yellow: parseFloat(diffScoresRaw[1] || json[1][i] || 0),
+                            blue: parseFloat(diffScoresRaw[2] || json[1][i] || 0),
+                        }
+                    });
+                }
+                const studentData = json.slice(5).map(r => ({
+                    id: generateId(),
+                    name: r[1],
+                    scores: evaluations.map((_, j) => r[2 + j * 2] || ''),
+                    highlight: highlightColIndex !== -1 ? (r[highlightColIndex] || null) : null
+                }));
+                return { id: generateId(), name, studentHeader, evaluations, studentData, studentColumnWidth: 200 };
+            }).filter(Boolean);
+            setSheets(prev => [...prev, ...importedSheets]);
+            if (importedSheets.length > 0) setActiveSheetId(importedSheets[0].id);
+        };
+        reader.readAsArrayBuffer(file);
+    };
+    const handleExport = () => {
+        const wb = XLSX.utils.book_new();
+        sheets.forEach(sheet => {
+            const h1 = ['', '', ...sheet.evaluations.flatMap(ev => [ev.name, ''])];
+            const h2 = ['', 'P. Máx:', ...sheet.evaluations.flatMap(ev => [ev.maxScore, ''])];
+            const h3 = ['', 'Exig:', ...sheet.evaluations.flatMap(ev => [ev.exigency, ''])];
+            const h4 = ['Puntajes Diferenciados', '', ...sheet.evaluations.flatMap(ev => [ev.differentiatedScores.enabled ? 'SI':'NO', `${ev.differentiatedScores.green},${ev.differentiatedScores.yellow},${ev.differentiatedScores.blue}`])];
+            const subH = ['#', sheet.studentHeader, ...sheet.evaluations.flatMap(() => ['Puntaje', 'Nota']), 'Promedio Final', 'Highlight'];
+            const aoa = [h1, h2, h3, h4, subH];
+            sheet.studentData.forEach((student, index) => {
+                const row = [index + 1, student.name];
+                let total = 0, count = 0;
+                sheet.evaluations.forEach((ev, i) => {
+                    let maxScore = ev.maxScore;
+                    if (ev.differentiatedScores.enabled && student.highlight) {
+                        maxScore = ev.differentiatedScores[student.highlight] || ev.maxScore;
+                    }
+                    const grade = calculateGrade(student.scores[i], maxScore, ev.exigency, globalSettings);
+                    row.push(student.scores[i] ?? '', isNaN(grade) ? '' : grade.toFixed(1));
+                    if (!isNaN(grade)) { total += grade; count++; }
+                });
+                const avg = count > 0 ? (total / count) : NaN;
+                row.push(isNaN(avg) ? '' : avg.toFixed(1));
+                row.push(student.highlight || '');
+                aoa.push(row);
+            });
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+        });
+        XLSX.writeFile(wb, 'calculadora_notas.xlsx');
+    };
+    return (
+        <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-screen">
+            <Header
+                activeSheet={activeSheet}
+                onAddEvaluation={handleAddEvaluation}
+                onAddStudent={handleAddStudent}
+                onFileImport={handleFileImport}
+                onExport={handleExport}
+                sheetsCount={sheets.length}
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="bg-white p-6 rounded-lg shadow-md">
+                    <h2 className="text-lg font-bold text-gray-700 mb-4">Cargar Archivo</h2>
+                    <p className="text-sm text-gray-500">Usa el botón "Importar" para cargar un archivo Excel (.xlsx).</p>
+                </div>
+                <GlobalSettings settings={globalSettings} setSettings={setGlobalSettings} />
+            </div>
+            {sheets.length > 0 && activeSheetId ? (
+                <div>
+                    <Tabs sheets={sheets} activeSheetId={activeSheetId} onSelectTab={setActiveSheetId} onDeleteTab={handleDeleteSheet} onRenameTab={handleRenameSheet} onAddTab={handleCreateSheet} />
+                    <GradesTable key={activeSheetId} sheet={sheets.find(s => s.id === activeSheetId)} onUpdateSheet={handleUpdateSheet} globalSettings={globalSettings} />
+                </div>
+            ) : (
+                <Placeholder onStartManual={handleCreateSheet} />
+            )}
+        </div>
+    );
+};
+
+ReactDOM.render(<App />, document.getElementById('root'));
+
+</script>
 </body>
 </html>
