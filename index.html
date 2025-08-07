@@ -25,6 +25,10 @@
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
         .resize-handle { position: absolute; right: -2px; top: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 20; background-color: #3b82f6; }
+        /* Styles for drag and drop */
+        .dragging-over { border-right: 3px solid #3b82f6; }
+        .draggable-header { cursor: grab; }
+        .draggable-header:active { cursor: grabbing; }
     </style>
 </head>
 <body>
@@ -275,50 +279,77 @@ const Tabs = ({ sheets, activeSheetId, onSelectTab, onDeleteTab, onRenameTab, on
 };
 const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
     const [openDropdownEvalId, setOpenDropdownEvalId] = React.useState(null);
+    const [draggedIndex, setDraggedIndex] = React.useState(null);
+    const [dragOverIndex, setDragOverIndex] = React.useState(null);
     const inputRefs = React.useRef({});
+    
     const handleSaveDiffScores = (updatedEval) => {
         const updatedEvals = sheet.evaluations.map(ev => ev.id === updatedEval.id ? updatedEval : ev);
         onUpdateSheet({ ...sheet, evaluations: updatedEvals });
     };
     const update = (data) => onUpdateSheet({ ...sheet, ...data });
     
-    // MODIFIED: This function now only updates the state while typing.
     const handleScoreChange = (r, e, v) => {
         const valueWithDot = v.replace(',', '.');
-        // Allows typing numbers, and a single dot/comma. Prevents other characters.
         if (valueWithDot !== '' && !/^\d*\.?\d*$/.test(valueWithDot)) {
              return;
         }
         const d = [...sheet.studentData];
-        d[r].scores[e] = valueWithDot; // Keep as a string to allow inputs like "5."
+        d[r].scores[e] = valueWithDot;
         update({ studentData: d });
     };
 
-    // NEW: This function validates and caps the score when you leave the input field.
     const handleScoreBlur = (r, e) => {
         const student = sheet.studentData[r];
         const evaluation = sheet.evaluations[e];
         let score = student.scores[e];
-
-        // Convert to number
         let numericScore = parseFloat(String(score).replace(',', '.'));
         if (isNaN(numericScore)) {
-            numericScore = ''; // Clear if invalid (e.g., just a ".")
+            numericScore = '';
         }
-
-        // Check against max score
         let maxScore = evaluation.maxScore;
         if (evaluation.differentiatedScores.enabled && student.highlight) {
             maxScore = evaluation.differentiatedScores[student.highlight] || evaluation.maxScore;
         }
-
         if (numericScore > maxScore) {
             numericScore = maxScore;
         }
-
         const d = [...sheet.studentData];
         d[r].scores[e] = numericScore;
         update({ studentData: d });
+    };
+
+    // Drag and Drop Handlers
+    const handleDragStart = (e, index) => {
+        setDraggedIndex(index);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+    const handleDragOver = (e, index) => {
+        e.preventDefault();
+        if (index !== dragOverIndex) {
+            setDragOverIndex(index);
+        }
+    };
+    const handleDrop = (e, dropIndex) => {
+        e.preventDefault();
+        if (draggedIndex === null || draggedIndex === dropIndex) return;
+
+        const newEvals = [...sheet.evaluations];
+        const [draggedItem] = newEvals.splice(draggedIndex, 1);
+        newEvals.splice(dropIndex, 0, draggedItem);
+
+        const newStudentData = sheet.studentData.map(student => {
+            const newScores = [...student.scores];
+            const [draggedScore] = newScores.splice(draggedIndex, 1);
+            newScores.splice(dropIndex, 0, draggedScore);
+            return { ...student, scores: newScores };
+        });
+
+        update({ evaluations: newEvals, studentData: newStudentData });
+    };
+    const handleDragEnd = () => {
+        setDraggedIndex(null);
+        setDragOverIndex(null);
     };
 
     const handleNameChange = (r, v) => { const d = [...sheet.studentData]; d[r].name = v; update({ studentData: d }); };
@@ -415,7 +446,15 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
                     <thead className="bg-gray-50">
                         <tr className="h-16">
                             {sheet.evaluations.map((ev, i) => (
-                                <th key={ev.id} colSpan="2" className="p-3 text-center text-xs font-medium text-gray-500 relative group">
+                                <th key={ev.id} colSpan="2" 
+                                    className={`p-3 text-center text-xs font-medium text-gray-500 relative group draggable-header ${i % 2 !== 0 ? 'bg-gray-100' : ''} ${dragOverIndex === i ? 'dragging-over' : ''}`}
+                                    draggable="true"
+                                    onDragStart={(e) => handleDragStart(e, i)}
+                                    onDragOver={(e) => handleDragOver(e, i)}
+                                    onDrop={(e) => handleDrop(e, i)}
+                                    onDragEnd={handleDragEnd}
+                                    onDragLeave={() => setDragOverIndex(null)}
+                                >
                                     <div className="flex justify-center items-center">
                                         <input type="text" value={ev.name} onChange={e => handleEvalNameChange(i, e.target.value)} className="font-bold text-base bg-transparent w-full text-center focus:bg-yellow-100 px-1 rounded"/>
                                         <div className="relative">
@@ -437,7 +476,7 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
                         </tr>
                         <tr className="h-10">
                             {sheet.evaluations.map((ev, i) =>
-                                <th key={ev.id} colSpan="2" className="p-1">
+                                <th key={ev.id} colSpan="2" className={`p-1 ${i % 2 !== 0 ? 'bg-gray-100' : ''}`}>
                                     <div className="flex justify-center items-center space-x-2">
                                         <label className="text-xs">P.Máx:</label>
                                         <input type="text" value={ev.maxScore} onChange={e => handleEvalHeaderChange(i, 'maxScore', e.target.value)} className="w-16 p-1 text-xs border rounded" />
@@ -447,9 +486,9 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
                                 </th>)}
                         </tr>
                         <tr className="h-10">
-                            {sheet.evaluations.map((ev) => <React.Fragment key={ev.id}>
-                                <th className="border-t border-b-2 p-1 w-24 text-xs font-medium text-gray-500">Puntaje</th>
-                                <th className="border-t border-b-2 p-1 w-24 bg-blue-50 text-xs font-medium">Nota</th>
+                            {sheet.evaluations.map((ev, i) => <React.Fragment key={ev.id}>
+                                <th className={`border-t border-b-2 p-1 w-24 text-xs font-medium text-gray-500 ${i % 2 !== 0 ? 'bg-gray-100' : ''}`}>Puntaje</th>
+                                <th className={`border-t border-b-2 p-1 w-24 bg-blue-50 text-xs font-medium ${i % 2 !== 0 ? 'bg-gray-100' : ''}`}>Nota</th>
                             </React.Fragment>)}
                         </tr>
                     </thead>
@@ -470,11 +509,11 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
                                 <tr key={s.id} className={`group h-14 ${s.highlight ? `highlight-${s.highlight}`:''}`}>
                                     {sheet.evaluations.map((ev, e) =>
                                         <React.Fragment key={ev.id}>
-                                            <td className="p-1 text-sm text-center">
-                                                {/* MODIFIED: Added onBlur event handler */}
-                                                <input type="text" value={s.scores[e] ?? ''} onChange={evt => handleScoreChange(r, e, evt.target.value)} onBlur={() => handleScoreBlur(r, e)} onKeyDown={evt => handleKeyDown(evt, r, e)} ref={el => inputRefs.current[`${r}-${e}`] = el} className="w-24 text-center bg-gray-50 rounded focus:bg-yellow-100 p-2"/>
+                                            {/* CORRECTED: The gray background is only applied if the row is not highlighted */}
+                                            <td className={`p-1 text-sm text-center ${!s.highlight && e % 2 !== 0 ? 'bg-gray-50' : ''}`}>
+                                                <input type="text" value={s.scores[e] ?? ''} onChange={evt => handleScoreChange(r, e, evt.target.value)} onBlur={() => handleScoreBlur(r, e)} onKeyDown={evt => handleKeyDown(evt, r, e)} ref={el => inputRefs.current[`${r}-${e}`] = el} className="w-24 text-center bg-transparent focus:bg-yellow-100 p-2 rounded"/>
                                             </td>
-                                            <td className={`p-1 text-sm text-center font-bold ${!isNaN(grades[e]) && (grades[e] >= globalSettings.passingGrade ? 'grade-pass' : 'grade-fail')}`}>{isNaN(grades[e]) ? 'N/A' : grades[e].toFixed(1)}</td>
+                                            <td className={`p-1 text-sm text-center font-bold ${!isNaN(grades[e]) && (grades[e] >= globalSettings.passingGrade ? 'grade-pass' : 'grade-fail')} ${!s.highlight && e % 2 !== 0 ? 'bg-gray-50' : ''}`}>{isNaN(grades[e]) ? 'N/A' : grades[e].toFixed(1)}</td>
                                         </React.Fragment>
                                     )}
                                     <td className={`p-4 text-sm text-center font-bold bg-green-50 ${!isNaN(avg) && (avg >= globalSettings.passingGrade ? 'grade-pass' : 'grade-fail')}`}>{isNaN(avg) ? 'N/A' : avg.toFixed(1)}</td>
