@@ -109,21 +109,39 @@ const AddEvalDropdown = ({ onAdd, onClose }) => {
         </div>
     );
 };
+
+// MODIFIED: This component now uses a Portal to ensure it renders on top of all other content.
 const DiffScoreDropdown = ({ evaluation, onSave, onClose }) => {
     const [evalData, setEvalData] = React.useState(evaluation);
     const dropdownRef = React.useRef(null);
+    const [position, setPosition] = React.useState({ top: 0, left: 0 });
+
+    React.useLayoutEffect(() => {
+        const trigger = document.querySelector(`[data-dropdown-id="${evaluation.id}"]`);
+        if (trigger) {
+            const rect = trigger.getBoundingClientRect();
+            setPosition({
+                top: rect.bottom + window.scrollY,
+                left: rect.left + window.scrollX - 256 + rect.width, // Adjust to align to the right
+            });
+        }
+    }, [evaluation.id]);
+
     React.useEffect(() => {
         const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) onClose();
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                onClose();
+            }
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [onClose]);
-    if (!evalData) return null;
+
     const handleToggle = () => setEvalData(prev => ({
         ...prev,
         differentiatedScores: { ...prev.differentiatedScores, enabled: !prev.differentiatedScores.enabled }
     }));
+
     const handleChange = (color, value) => {
         const valueWithDot = value.replace(',', '.');
         if (valueWithDot && isNaN(parseFloat(valueWithDot))) return;
@@ -133,9 +151,11 @@ const DiffScoreDropdown = ({ evaluation, onSave, onClose }) => {
             differentiatedScores: { ...prev.differentiatedScores, [color]: isNaN(numValue) ? '' : numValue }
         }));
     };
-    return (
+
+    const dropdownContent = (
         <div ref={dropdownRef}
-            className="absolute right-0 mt-2 bg-white rounded-md shadow-lg z-[9999] p-4 border w-64">
+            className="absolute bg-white rounded-md shadow-lg z-[9999] p-4 border w-64"
+            style={{ top: `${position.top}px`, left: `${position.left}px` }}>
             <div className="space-y-3">
                 <div className="flex items-center">
                     <input type="checkbox" checked={evalData.differentiatedScores.enabled} onChange={handleToggle} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
@@ -163,7 +183,10 @@ const DiffScoreDropdown = ({ evaluation, onSave, onClose }) => {
             </div>
         </div>
     );
+    
+    return ReactDOM.createPortal(dropdownContent, document.getElementById('portal-root'));
 };
+
 const Placeholder = ({ onStartManual }) => (
     <div className="text-center bg-white p-10 rounded-lg shadow-md">
         <h2 className="text-2xl font-bold text-gray-700 mb-4">Comienza a Calcular Notas</h2>
@@ -257,7 +280,6 @@ const Tabs = ({ sheets, activeSheetId, onSelectTab, onDeleteTab, onRenameTab, on
                     {editingId === s.id
                         ? <input type="text" value={name} onChange={e => setName(e.target.value)} onBlur={() => handleRename(s.id)} onKeyDown={e => e.key === 'Enter' && handleRename(s.id)} autoFocus className="bg-transparent"/>
                         : <span>{s.name}</span>}
-                    {/* MODIFIED: Show delete button only for the active tab */}
                     {activeSheetId === s.id && (
                          <button onClick={e => { e.stopPropagation(); if(confirm(`¿Seguro que quieres eliminar la hoja "${s.name}"?`)) onDeleteTab(s.id); }} className="ml-3 text-gray-500 hover:text-red-600">&times;</button>
                     )}
@@ -457,7 +479,6 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
                 </tr>
                 <tr className="h-10">
                     {sheet.evaluations.map((ev, i) => <React.Fragment key={ev.id}>
-                        {/* MODIFIED: Reduced width from w-24 to w-20 */}
                         <th className={`border-t border-b-2 p-1 w-20 text-xs font-medium text-gray-500 ${i % 2 !== 0 ? 'bg-gray-100' : ''}`}>Puntaje</th>
                         <th className={`border-t border-b-2 p-1 w-20 bg-blue-50 text-xs font-medium ${i % 2 !== 0 ? 'bg-gray-100' : ''}`}>Nota</th>
                     </React.Fragment>)}
@@ -479,7 +500,6 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
                             {sheet.evaluations.map((ev, e) =>
                                 <React.Fragment key={ev.id}>
                                     <td className={`p-1 text-sm text-center ${!s.highlight && e % 2 !== 0 ? 'bg-gray-50' : ''}`}>
-                                        {/* MODIFIED: Reduced width from w-24 to w-20 */}
                                         <input type="text" value={s.scores[e] ?? ''} onChange={evt => handleScoreChange(r, e, evt.target.value)} onBlur={() => handleScoreBlur(r, e)} onKeyDown={evt => handleKeyDown(evt, r, e)} ref={el => inputRefs.current[`${r}-${e}`] = el} className="w-20 text-center bg-transparent focus:bg-yellow-100 p-2 rounded"/>
                                     </td>
                                     <td className={`p-1 text-sm text-center font-bold ${!isNaN(grades[e]) && (grades[e] >= globalSettings.passingGrade ? 'grade-pass' : 'grade-fail')} ${!s.highlight && e % 2 !== 0 ? 'bg-gray-50' : ''}`}>{isNaN(grades[e]) ? 'N/A' : grades[e].toFixed(1)}</td>
@@ -496,7 +516,6 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
 
     return (
         <div className="bg-white p-2 sm:p-4 rounded-b-lg shadow-md flex">
-            {/* MODIFIED: Added flex-shrink-0 to prevent this column from resizing */}
             <div ref={setStudentRoot} className="relative flex-shrink-0"></div>
             <div ref={setGradesRoot} className="overflow-x-auto flex-grow"></div>
             {StudentColumnPortal}
