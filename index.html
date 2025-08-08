@@ -276,7 +276,7 @@ const Placeholder = React.memo(({ onStartManual }) => (
     </div>
 ));
 
-const Header = React.memo(({ activeSheet, onAddEvaluation, onAddStudent, onFileImport, onExport, sheetsCount }) => {
+const Header = React.memo(({ activeSheet, onAddEvaluation, onAddStudent, onFileImport, onExport, sheetsCount, isSaving }) => {
     const [isAddEvalDropdownOpen, setAddEvalDropdownOpen] = React.useState(false);
     const fileInputRef = React.useRef(null);
     const handleFileChange = (event) => {
@@ -288,6 +288,7 @@ const Header = React.memo(({ activeSheet, onAddEvaluation, onAddStudent, onFileI
         <header className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b-2 border-gray-200">
             <h1 className="text-3xl font-bold text-gray-800">Calculadora de Notas</h1>
             <div className="flex items-center space-x-2 mt-4 sm:mt-0">
+                <span className={`text-sm ${isSaving ? 'text-yellow-600 animate-pulse' : 'text-green-600'}`}>{isSaving ? 'Guardando…' : '✔ Guardado'}</span>
                 <div className="relative">
                     <button aria-label="Añadir nueva evaluación" onClick={() => setAddEvalDropdownOpen(prev => !prev)} disabled={!activeSheet} className="px-4 py-2 bg-green-500 text-white rounded-md shadow-sm hover:bg-green-600 disabled:bg-gray-300">Añadir Evaluación</button>
                     {isAddEvalDropdownOpen && <AddEvalDropdown onAdd={onAddEvaluation} onClose={() => setAddEvalDropdownOpen(false)} />}
@@ -681,15 +682,17 @@ const App = () => {
     const [activeSheetId, setActiveSheetId] = React.useState(initial.activeSheetId);
     const [globalSettings, setGlobalSettings] = React.useState(initial.globalSettings);
     const [pendingImport, setPendingImport] = React.useState(null);
+    const [isSaving, setIsSaving] = React.useState(false);
     
-// Guardar con debounce en localStorage
-React.useEffect(() => {
-    const handler = setTimeout(() => {
-        saveStateToLocalStorage({ sheets, activeSheetId, globalSettings });
-    }, 500); // 500ms después del último cambio
-
-    return () => clearTimeout(handler);
-}, [sheets, activeSheetId, globalSettings]);
+    // Guardar con debounce en localStorage
+    React.useEffect(() => {
+        setIsSaving(true);
+        const handler = setTimeout(() => {
+            saveStateToLocalStorage({ sheets, activeSheetId, globalSettings });
+            setIsSaving(false);
+        }, 500);
+        return () => clearTimeout(handler);
+    }, [sheets, activeSheetId, globalSettings]);
 
     const handleUpdateSheet = React.useCallback(u => setSheets(p => p.map(s => s.id === u.id ? u : s)), []);
     const handleCreateSheet = React.useCallback(() => {
@@ -729,7 +732,6 @@ React.useEffect(() => {
             evaluations: [...activeSheet.evaluations, newEvaluation],
             studentData: activeSheet.studentData.map(s => ({ ...s, scores: [...s.scores, ''] }))
         };
-        alert('Evaluación añadida');
         handleUpdateSheet(updatedSheet);
     }, [activeSheet, handleUpdateSheet]);
 
@@ -741,7 +743,6 @@ React.useEffect(() => {
             scores: Array(activeSheet.evaluations.length).fill(''),
             highlight: null
         };
-        alert('Alumno añadido');
         handleUpdateSheet({ ...activeSheet, studentData: [...activeSheet.studentData, newStudent] });
     }, [activeSheet, handleUpdateSheet]);
 
@@ -880,6 +881,7 @@ React.useEffect(() => {
                 onFileImport={handleFileImport}
                 onExport={handleExport}
                 sheetsCount={sheets.length}
+                isSaving={isSaving}
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div className="bg-white p-6 rounded-lg shadow-md">
