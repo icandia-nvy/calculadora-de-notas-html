@@ -210,7 +210,8 @@ const DiffScoreDropdown = ({ evaluation, onSave, onClose }) => {
   return ReactDOM.createPortal(dropdownContent, document.getElementById('portal-root'));
 };
 
-const ImportConfirmationModal = ({ onConfirmReplace, onConfirmAdd, onCancel }) => {
+
+const ImportConfirmationModal = ({ pending, existingSheets, onConfirmReplace, onConfirmAdd, onCancel }) => {
   const modalRef = React.useRef(null);
   React.useEffect(() => {
     const handleClickOutside = (event) => { if (modalRef.current && !modalRef.current.contains(event.target)) onCancel(); };
@@ -222,13 +223,76 @@ const ImportConfirmationModal = ({ onConfirmReplace, onConfirmAdd, onCancel }) =
       document.removeEventListener("keydown", onEsc);
     };
   }, [onCancel]);
+
+  const existingNames = React.useMemo(() => new Set((existingSheets||[]).map(s => (s.name||'').trim().toLowerCase())), [existingSheets]);
+  const summary = React.useMemo(() => {
+    const items = (pending||[]).map((sh, idx) => {
+      const willReplace = existingNames.has((sh.name||'').trim().toLowerCase());
+      return {
+        index: idx,
+        name: sh.name || `Hoja ${idx+1}`,
+        students: Array.isArray(sh.studentData) ? sh.studentData.length : 0,
+        evaluations: Array.isArray(sh.evaluations) ? sh.evaluations.length : 0,
+        willReplace,
+        sampleStudents: (sh.studentData||[]).slice(0,5).map(st => st.name || ''),
+        sampleEvaluations: (sh.evaluations||[]).slice(0,4).map(ev => ev.name || 'Evaluación')
+      };
+    });
+    const totals = items.reduce((acc, it) => {
+      acc.sheets++; acc.students += it.students; acc.evaluations += it.evaluations; if (it.willReplace) acc.willReplace++;
+      return acc;
+    }, { sheets:0, students:0, evaluations:0, willReplace:0 });
+    return { items, totals };
+  }, [pending, existingNames]);
+
   const modalContent = (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000]">
-      <div ref={modalRef} className="bg-white p-6 rounded-lg shadow-xl">
-        <h3 className="text-lg font-bold mb-4">Importar Hojas</h3>
-        <p className="mb-6">¿Cómo quieres importar las hojas del archivo?</p>
-        <div className="flex justify-end space-x-4">
-          <button onClick={onCancel} className="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">Cancelar</button>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
+      <div ref={modalRef} className="bg-white p-5 rounded-lg shadow-xl w-[min(1000px,95vw)] max-h-[85vh] flex flex-col">
+        <h3 className="text-lg font-bold mb-1">Importar hojas desde Excel</h3>
+        <p className="text-sm text-gray-600 mb-3">
+          Se detectaron <strong>{summary.totals.sheets}</strong> hoja(s), <strong>{summary.totals.students}</strong> alumno(s) totales y <strong>{summary.totals.evaluations}</strong> evaluación(es) en total.
+        </p>
+
+        <div className="border rounded-md overflow-hidden">
+          <div className="grid grid-cols-12 bg-gray-50 text-xs font-medium text-gray-700 border-b">
+            <div className="col-span-4 p-2">Hoja</div>
+            <div className="col-span-2 p-2 text-center">Alumnos</div>
+            <div className="col-span-2 p-2 text-center">Evaluaciones</div>
+            <div className="col-span-4 p-2">Preview</div>
+          </div>
+          <div className="max-h-[48vh] overflow-auto divide-y">
+            {summary.items.map((it) => (
+              <div key={it.index} className="grid grid-cols-12 items-start text-sm">
+                <div className="col-span-4 p-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{it.name}</span>
+                    {it.willReplace
+                      ? <span className="text-amber-700 bg-amber-100 px-2 py-0.5 rounded text-xs">Coincide con una existente</span>
+                      : <span className="text-green-700 bg-green-100 px-2 py-0.5 rounded text-xs">Nueva</span>
+                    }
+                  </div>
+                </div>
+                <div className="col-span-2 p-2 text-center">{it.students}</div>
+                <div className="col-span-2 p-2 text-center">{it.evaluations}</div>
+                <div className="col-span-4 p-2">
+                  <div className="text-xs text-gray-700 flex gap-3 flex-wrap">
+                    <div><span className="font-medium">Alumnos:</span> {it.sampleStudents.length ? it.sampleStudents.join(', ') : '—'}</div>
+                    <div><span className="font-medium">Evaluaciones:</span> {it.sampleEvaluations.length ? it.sampleEvaluations.join(', ') : '—'}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {summary.totals.willReplace > 0 && (
+          <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+            <strong>Advertencia:</strong> {summary.totals.willReplace} hoja(s) del archivo tienen el mismo nombre que hojas existentes. <em>Reemplazar</em> las sobrescribirá; <em>Añadir</em> creará duplicados con el mismo nombre.
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 mt-4">
+          <button onClick={onCancel} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">Cancelar</button>
           <button onClick={onConfirmAdd} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Añadir a las existentes</button>
           <button onClick={onConfirmReplace} className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Reemplazar todo</button>
         </div>
@@ -237,6 +301,7 @@ const ImportConfirmationModal = ({ onConfirmReplace, onConfirmAdd, onCancel }) =
   );
   return ReactDOM.createPortal(modalContent, document.getElementById('portal-root'));
 };
+
 
 /* --- Nuevo: Popover de Configuración --- */
 const SettingsPopover = ({ anchorId, open, onClose, children }) => {
@@ -457,6 +522,46 @@ const StudentRow = React.memo(({
 });
   
 const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
+  // === Student list editor (modal) ===
+  const [studentListOpen, setStudentListOpen] = React.useState(false);
+  const [studentListText, setStudentListText] = React.useState('');
+  const parseNamesFromText = (text) => {
+    if (!text) return [];
+    return text.split(/[\r\n\t,]+/).map(n => n.trim()).filter(n => n.length > 0);
+  };
+  const ensureScoresLength = (scores, evaluationsLen) => {
+    const arr = Array.isArray(scores) ? [...scores] : [];
+    if (arr.length < evaluationsLen) { while (arr.length < evaluationsLen) arr.push(''); }
+    else if (arr.length > evaluationsLen) arr.length = evaluationsLen;
+    return arr;
+  };
+  const replaceStudentList = () => {
+    const names = parseNamesFromText(studentListText);
+    const newStudents = names.map((name, i) => ({
+      id: generateId() + '_' + i,
+      name,
+      highlight: null,
+      scores: ensureScoresLength([], sheet.evaluations.length)
+    }));
+    onUpdateSheet({ ...sheet, studentData: newStudents });
+    setStudentListOpen(false); setStudentListText('');
+  };
+  const addToStudentList = () => {
+    const incoming = parseNamesFromText(studentListText);
+    if (incoming.length === 0) { setStudentListOpen(false); return; }
+    const existingLower = new Set(sheet.studentData.map(s => (s.name || '').trim().toLowerCase()));
+    const toAdd = incoming.filter(n => !existingLower.has(n.trim().toLowerCase()));
+    if (toAdd.length === 0) { setStudentListOpen(false); return; }
+    const newStudents = toAdd.map((name, i) => ({
+      id: generateId() + '_add_' + i,
+      name,
+      highlight: null,
+      scores: ensureScoresLength([], sheet.evaluations.length)
+    }));
+    onUpdateSheet({ ...sheet, studentData: [...sheet.studentData, ...newStudents] });
+    setStudentListOpen(false); setStudentListText('');
+  };
+
   const [studentRoot, setStudentRoot] = React.useState(null);
   const [gradesRoot, setGradesRoot] = React.useState(null);
   const [openDropdownEvalId, setOpenDropdownEvalId] = React.useState(null);
@@ -599,8 +704,18 @@ const inputRefs = React.useRef({});
       <tr className="h-16">
         <th rowSpan="3" className="p-3 w-12 text-left text-xs font-medium text-gray-500 border-b-2">#</th>
         <th style={{ width: `${sheet.studentColumnWidth}px`}} rowSpan="3" className="p-3 text-left text-xs font-medium text-gray-500 border-b-2 relative">
-          {sheet.studentHeader}
-          <div className="resize-handle" onMouseDown={handleColumnResize}></div>
+          
+  <div className="flex items-center justify-between pr-6">
+    <span>{sheet.studentHeader}</span>
+    <button
+      id="student-list-gear"
+      onClick={() => setStudentListOpen(true)}
+      className="ml-2 px-2 py-1 text-sm bg-gray-200 hover:bg-gray-300 rounded shadow-sm"
+      title="Editar lista de alumnos (pegar o escribir)"
+      aria-label="Editar lista de alumnos"
+    >⚙️</button>
+  </div>
+<div className="resize-handle" onMouseDown={handleColumnResize}></div>
         </th>
       </tr>
       <tr className="h-10"></tr>
@@ -729,7 +844,34 @@ const inputRefs = React.useRef({});
       <div ref={setStudentRoot} className="relative flex-shrink-0"></div>
       <div ref={setGradesRoot} className="overflow-x-auto flex-grow"></div>
       {StudentColumnPortal}
-      {GradesColumnPortal}
+      
+      {studentListOpen && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
+          <div className="bg-white rounded-lg shadow-xl w-[min(900px,95vw)] max-h-[85vh] p-5 flex flex-col">
+            <h3 className="text-lg font-semibold mb-2">Lista de alumnos</h3>
+            <p className="text-sm text-gray-600 mb-3">
+              Pega o escribe un alumno por línea (también acepta comas o tabulaciones).
+              Puedes <strong>Reemplazar</strong> la lista actual o <strong>Añadir</strong> solo los nuevos.
+            </p>
+            <textarea
+              className="border rounded p-3 text-sm flex-1 min-h-[220px] outline-none focus:ring-2 focus:ring-blue-500"
+              value={studentListText}
+              onChange={e => setStudentListText(e.target.value)}
+              placeholder={"Ejemplo:\nJuan Pérez\nMaría López\nAna Díaz"}
+            />
+            <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
+              <div>Actual: {sheet.studentData.length} alumnos · Evaluaciones: {sheet.evaluations.length}</div>
+              <div className="space-x-2">
+                <button onClick={() => setStudentListOpen(false)} className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300">Cancelar</button>
+                <button onClick={addToStudentList} className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Añadir (únicos)</button>
+                <button onClick={replaceStudentList} className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700">Reemplazar</button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.getElementById('portal-root')
+      )}
+{GradesColumnPortal}
     </div>
   );
 };
@@ -940,7 +1082,7 @@ const App = () => {
   return (
     <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-screen">
       {pendingImport && (
-        <ImportConfirmationModal
+        <ImportConfirmationModal pending={pendingImport} existingSheets={sheets}
           onConfirmReplace={handleConfirmReplace}
           onConfirmAdd={handleConfirmAdd}
           onCancel={() => setPendingImport(null)}
