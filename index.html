@@ -30,12 +30,49 @@
     .draggable-tab { cursor: grab; }
     .draggable-tab:active { cursor: grabbing; }
   </style>
+
+  <!-- Firebase SDKs (Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script>
+    // ⚙️ Rellena con la configuración de tu proyecto Firebase (Console → Project settings)
+    window.__FIREBASE_CONFIG__ = {
+  apiKey: "AIzaSyBpN50N83IzA7H3VAf8p7h1-vJNLZHZHrM",
+  authDomain: "calculadora-notas-b101b.firebaseapp.com",
+  projectId: "calculadora-notas-b101b",
+  storageBucket: "calculadora-notas-b101b.firebasestorage.app",
+  messagingSenderId: "404555844235",
+  appId: "1:404555844235:web:0ab33d589d3c3c0d37e28e"
+    };
+    (function initFirebase(){
+      try {
+        const cfg = window.__FIREBASE_CONFIG__ || {};
+        const required = ['apiKey','authDomain','projectId','appId'];
+        const placeholder = required.some(k => !cfg[k] || String(cfg[k]||'').startsWith('REEMPLAZA'));
+        if (!placeholder) {
+          firebase.initializeApp(cfg);
+          window.__FB_DB__ = firebase.firestore();
+          window.__FB_AUTH__ = firebase.auth();
+          window.__FIREBASE_OK__ = true;
+          window.__FB_AUTH__.signInAnonymously().catch(()=>{});
+          console.log('[Firebase] Inicializado.');
+        } else {
+          window.__FIREBASE_OK__ = false;
+          console.warn('[Firebase] Config no completada. Botones de compartir por código se deshabilitarán.');
+        }
+      } catch (e) {
+        window.__FIREBASE_OK__ = false;
+        console.warn('[Firebase] No inicializado:', e);
+      }
+    })();
+  </script>
 </head>
 <body>
 <div id="root"></div>
 <div id="portal-root"></div>
 
-<script type="text/babel" data-type="module">
+<script type="text/babel" data-presets="env,react">
 /* =========================
    CONFIG / UTILIDADES
    ========================= */
@@ -345,14 +382,50 @@ const SettingsPopover = ({ anchorId, open, onClose, children }) => {
 };
 
 /* --- Header actualizado con botón Configuración e indicador de guardado --- */
-const Header = React.memo(({ activeSheet, onAddEvaluation, onAddStudent, onFileImport, onExport, sheetsCount, isSaving, lastSaved, onToggleSettings }) => {
+const Header = React.memo(({ 
+  activeSheet, 
+  onAddEvaluation, 
+  onAddStudent, 
+  onFileImport, 
+  onExport, 
+  sheetsCount, 
+  isSaving, 
+  lastSaved, 
+  onToggleSettings, 
+  onShareByCode, 
+  onOpenLoadByCode, 
+  shareDisabled 
+}) => {
+  // Dropdown states + refs
+  const [importOpen, setImportOpen] = React.useState(false);
+  const [menuOpen, setMenuOpen] = React.useState(false); // Export + Share combined
   const [isAddEvalDropdownOpen, setAddEvalDropdownOpen] = React.useState(false);
+  const importRef = React.useRef(null);
+  const menuRef = React.useRef(null);
   const fileInputRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const onDoc = (e) => {
+      if (importOpen && importRef.current && !importRef.current.contains(e.target)) setImportOpen(false);
+      if (menuOpen && menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    };
+    const onEsc = (e) => {
+      if (e.key === 'Escape') { setImportOpen(false); setMenuOpen(false); setAddEvalDropdownOpen(false); }
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onEsc);
+    return () => { 
+      document.removeEventListener('mousedown', onDoc); 
+      document.removeEventListener('keydown', onEsc); 
+    };
+  }, [importOpen, menuOpen]);
+
   const handleFileChange = (event) => {
     const file = event.target.files[0];
     if (file) onFileImport(file);
     event.target.value = '';
   };
+
   return (
     <header className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b-2 border-gray-200">
       <div className="flex items-center gap-2">
@@ -372,13 +445,54 @@ const Header = React.memo(({ activeSheet, onAddEvaluation, onAddStudent, onFileI
           {isAddEvalDropdownOpen && <AddEvalDropdown onAdd={onAddEvaluation} onClose={() => setAddEvalDropdownOpen(false)} />}
         </div>
         <button aria-label="Añadir nuevo alumno" onClick={onAddStudent} disabled={!activeSheet} className="px-4 py-2 bg-blue-500 text-white rounded-md shadow-sm hover:bg-blue-600 disabled:bg-gray-300">Añadir Alumno</button>
-        <button aria-label="Importar desde archivo Excel" onClick={() => fileInputRef.current.click()} className="px-4 py-2 bg-gray-700 text-white rounded-md shadow-sm hover:bg-gray-800">Importar</button>
+        
+        {/* Import dropdown */}
+        <div ref={importRef} className="relative inline-block">
+          <button onClick={() => setImportOpen(v => !v)}
+                  className="px-4 py-2 bg-gray-700 text-white rounded-md shadow-sm hover:bg-gray-800">
+            Importar ▾
+          </button>
+          {importOpen && (
+            <div className="absolute right-0 mt-2 w-56 bg-white border rounded shadow z-30">
+              <button className="w-full text-left px-3 py-2 hover:bg-gray-50"
+                      onClick={() => { setImportOpen(false); fileInputRef.current && fileInputRef.current.click(); }}>
+                Desde Excel (.xlsx)
+              </button>
+              <button className="w-full text-left px-3 py-2 hover:bg-gray-50"
+                      onClick={() => { setImportOpen(false); onOpenLoadByCode(); }}>
+                Desde código (Firebase)
+              </button>
+            </div>
+          )}
+        </div>
         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
-        <button aria-label="Exportar a archivo Excel" onClick={onExport} disabled={sheetsCount === 0} className="px-4 py-2 bg-orange-500 text-white rounded-md shadow-sm hover:bg-orange-600 disabled:bg-gray-300">Exportar</button>
+
+        {/* Combined Export + Share dropdown */}
+        <div ref={menuRef} className="relative inline-block">
+          <button onClick={() => setMenuOpen(v => !v)}
+                  disabled={sheetsCount === 0 && shareDisabled}
+                  className="px-4 py-2 bg-orange-500 text-white rounded-md shadow-sm hover:bg-orange-600 disabled:bg-gray-300">
+            Exportar / Compartir ▾
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 mt-2 w-64 bg-white border rounded shadow z-30">
+              <button className="w-full text-left px-3 py-2 hover:bg-gray-50"
+                      onClick={() => { setMenuOpen(false); onExport(); }}>
+                Exportar a Excel (.xlsx)
+              </button>
+              <div className="border-t my-1"></div>
+              <button className="w-full text-left px-3 py-2 hover:bg-gray-50 disabled:text-gray-400"
+                      disabled={shareDisabled}
+                      onClick={() => { setMenuOpen(false); onShareByCode(); }}>
+                Generar código (Firebase)
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
-});
+});;
 
 const GlobalSettings = React.memo(({ settings, setSettings }) => {
   const [displayValues, setDisplayValues] = React.useState({
@@ -869,7 +983,11 @@ const inputRefs = React.useRef({});
             </div>
           </div>
         </div>,
-        document.getElementById('portal-root')
+        
+      
+
+      
+document.getElementById('portal-root')
       )}
 {GradesColumnPortal}
     </div>
@@ -880,6 +998,14 @@ const inputRefs = React.useRef({});
    APP PRINCIPAL (única)
    ========================= */
 const App = () => {
+
+  // Reactivar UI al completar auth de Firebase (evento disparado en init)
+  const [, __fbTick] = React.useState(0);
+  React.useEffect(() => {
+    const handler = () => __fbTick(x => x + 1);
+    document.addEventListener('firebase-ready', handler);
+    return () => document.removeEventListener('firebase-ready', handler);
+  }, []);
   const defaultState = {
     sheets: [],
     activeSheetId: null,
@@ -904,20 +1030,124 @@ const App = () => {
   const [lastSaved, setLastSaved] = React.useState(null);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
 
-  // Guardar con debounce en localStorage + indicador
+  // --- Firebase ready state for UI (re-render when auth/db ready) ---
+  const [fbReady, setFbReady] = React.useState(!!(window.__FB_DB__ && (window.__FB_UID__ || (window.firebase && firebase.auth && firebase.auth().currentUser))));
   React.useEffect(() => {
+    const compute = () => setFbReady(!!(window.__FB_DB__ && (window.__FB_UID__ || (window.firebase && firebase.auth && firebase.auth().currentUser))));
+    // Initial check
+    compute();
+    // Listen to our init event
+    const onReady = () => compute();
+    document.addEventListener('firebase-ready', onReady);
+    // Also subscribe directly to auth changes (works even if init fired before App mounted)
+    let unsub = null;
+    try {
+      if (window.firebase && firebase.auth) {
+        const auth = firebase.auth();
+        unsub = auth.onAuthStateChanged(u => { window.__FB_UID__ = u ? u.uid : null; compute(); });
+      }
+    } catch(e){}
+    // Fallback: periodic check (covers late script loads)
+    const timer = setInterval(compute, 1500);
+    return () => {
+      document.removeEventListener('firebase-ready', onReady);
+      if (unsub) unsub();
+      clearInterval(timer);
+    };
+  }, []);
+
+  // --- Compartir por código (Firestore) ---
+  const [shareOpen, setShareOpen] = React.useState(false);
+  const [shareCode, setShareCode] = React.useState('');
+  const [openLoadByCode, setOpenLoadByCode] = React.useState(false);
+  const [codeInput, setCodeInput] = React.useState('');
+
+  function generateShareCode(len = 7) {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let out = '';
+    for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+    return out;
+  }
+
+  const handleShareByCode = async () => {
+    try {
+      if (!window.__FB_DB__ || !window.firebase || !firebase.auth) {
+        alert('Firebase no está configurado.');
+        return;
+      }
+      // Asegura que haya usuario anónimo
+      const auth = firebase.auth();
+      let user = auth.currentUser;
+      if (!user) {
+        try { await auth.signInAnonymously(); } catch (e) { console.error('Auth anónima falló:', e); alert('No fue posible autenticar.'); return; }
+        // Espera a onAuthStateChanged una sola vez
+        user = await new Promise((resolve, reject) => {
+          const unsub = auth.onAuthStateChanged(u => { unsub(); u ? resolve(u) : reject(new Error('Sin usuario')); });
+        });
+      }
+      window.__FB_UID__ = user.uid;
+      // Payload + owner
+      const code = generateShareCode();
+      const payload = { sheets, activeSheetId, globalSettings, v: 1, createdAt: Date.now(), owner: window.__FB_UID__ };
+      await window.__FB_DB__.collection('gradeSheets').doc(code).set(payload);
+      setShareCode(code);
+      setShareOpen(true);
+    } catch (e) {
+      console.error('Error al compartir por código', e);
+      alert('No se pudo generar el código. Revisa la consola.');
+    }
+  };;
+
+  const loadByCode = async (replace) => {
+    if (!window.__FIREBASE_OK__ || !window.__FB_DB__) {
+      alert('Firebase no está configurado.');
+      return;
+    }
+    try {
+      const code = (codeInput || '').trim().toUpperCase();
+      if (!code) { alert('Ingresa un código.'); return; }
+      const snap = await window.__FB_DB__.collection('gradeSheets').doc(code).get();
+      if (!snap.exists) { alert('Código no encontrado'); return; }
+      const data = snap.data() || {};
+      const incoming = Array.isArray(data.sheets) ? data.sheets : [];
+      if (replace) {
+        setSheets(incoming);
+        setActiveSheetId(data.activeSheetId || (incoming[0] && incoming[0].id) || null);
+      } else {
+        const mapped = incoming.map(sh => ({
+          ...sh,
+          id: sh.id || ('imp_' + Math.random().toString(36).slice(2,8)),
+          studentData: (sh.studentData || []).map(st => ({ ...st, id: st.id || ('st_' + Math.random().toString(36).slice(2,8)) }))
+        }));
+        setSheets(prev => [...prev, ...mapped]);
+        if (!activeSheetId && mapped[0]) setActiveSheetId(mapped[0].id);
+      }
+      setGlobalSettings(prev => ({ ...prev, ...(data.globalSettings || {}) }));
+      setOpenLoadByCode(false);
+      setCodeInput('');
+    } catch (e) {
+      console.error('Error al cargar por código', e);
+      alert('No se pudo cargar por código. Revisa la consola.');
+    }
+  };
+  const handleLoadByCodeAdd = () => loadByCode(false);
+  const handleLoadByCodeReplace = () => loadByCode(true);
+
+  // Guardar con debounce en localStorage + indicador
+	React.useEffect(() => {
     setIsSaving(true);
     const handler = setTimeout(() => {
       saveStateToLocalStorage({ sheets, activeSheetId, globalSettings });
       setIsSaving(false);
       setLastSaved(new Date());
     }, 500);
+    // 👇 LÍNEA CORREGIDA
     return () => clearTimeout(handler);
   }, [sheets, activeSheetId, globalSettings]);
 
   const handleUpdateSheet = React.useCallback(u => setSheets(p => p.map(s => s.id === u.id ? u : s)), []);
   const handleCreateSheet = React.useCallback(() => {
-    const name = `Hoja ${sheets.length + 1}`;
+    const name = 'Hoja ' + (sheets.length + 1);
     const newSheet = { id: generateId(), name, studentHeader: 'Alumnos', evaluations: [], studentData: [], studentColumnWidth: 200 };
     setSheets(p => [...p, newSheet]);
     setActiveSheetId(newSheet.id);
@@ -1046,7 +1276,7 @@ const App = () => {
             maxScore = ev.differentiatedScores[student.highlight] || ev.maxScore;
           }
           const numericScore = parseFloat(student.scores[i]);
-          const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings);
+const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings);
           row.push(student.scores[i] ?? '', isNaN(grade) ? '' : grade.toFixed(1));
           if (!isNaN(grade)) { total += grade; count++; }
         });
@@ -1080,7 +1310,8 @@ const App = () => {
   }, [handleAddStudent, handleAddEvaluation]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-screen">
+    <>
+      <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-screen">
       {pendingImport && (
         <ImportConfirmationModal pending={pendingImport} existingSheets={sheets}
           onConfirmReplace={handleConfirmReplace}
@@ -1089,8 +1320,7 @@ const App = () => {
         />
       )}
 
-      <Header
-        activeSheet={activeSheet}
+      <Header activeSheet={activeSheet}
         onAddEvaluation={handleAddEvaluation}
         onAddStudent={handleAddStudent}
         onFileImport={handleFileImport}
@@ -1099,6 +1329,9 @@ const App = () => {
         isSaving={isSaving}
         lastSaved={lastSaved}
         onToggleSettings={() => setSettingsOpen(v => !v)}
+        onShareByCode={handleShareByCode}
+        onOpenLoadByCode={() => setOpenLoadByCode(true)}
+        shareDisabled={!fbReady}
       />
 
       {/* Popover de configuración (reemplaza la tarjeta "Cargar Archivo") */}
@@ -1129,6 +1362,44 @@ const App = () => {
         </div>
       )}
     </div>
+      {/* Modal: Abrir por código */}
+      {openLoadByCode && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
+          <div className="bg-white p-5 rounded-lg shadow-xl w-[min(420px,95vw)]">
+            <h3 className="text-lg font-semibold mb-2">Abrir por código</h3>
+            <p className="text-sm text-gray-600 mb-3">Ingresa el código compartido para añadir o reemplazar las hojas actuales:</p>
+            <input value={codeInput} onChange={e => setCodeInput(e.target.value.toUpperCase())}
+                   className="border rounded px-2 py-2 w-full font-mono mb-4" placeholder="CÓDIGO" />
+            <div className="flex justify-end gap-2">
+              <button className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300" onClick={() => setOpenLoadByCode(false)}>Cancelar</button>
+              <button onClick={handleLoadByCodeAdd} className="px-3 py-2 bg-blue-600 text-white rounded">Añadir</button>
+              <button onClick={handleLoadByCodeReplace} className="px-3 py-2 bg-red-600 text-white rounded">Reemplazar</button>
+            </div>
+          </div>
+        </div>,
+        document.getElementById('portal-root')
+      )}
+    {/* Modal: Código generado */}
+      {shareOpen && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
+                    <div className="bg-white p-5 rounded-lg shadow-xl w-[min(420px,95vw)]">
+            <h3 className="text-lg font-semibold mb-2">Código de tabla</h3>
+            <p className="text-sm text-gray-600 mb-3">Comparte este código para abrir esta tabla en otro dispositivo:</p>
+            <div className="flex items-center gap-2 mb-4">
+              <input className="border rounded px-2 py-1 w-full text-center font-mono text-lg" readOnly value={shareCode} />
+              <button className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300"
+                onClick={() => { navigator.clipboard?.writeText(shareCode); }}>Copiar</button>
+            </div>
+            <div className="flex justify-end">
+              <button className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300" onClick={() => setShareOpen(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>,
+        document.getElementById('portal-root')
+      )}
+
+    </>
+
   );
 };
 
