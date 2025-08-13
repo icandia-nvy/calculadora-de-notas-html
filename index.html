@@ -70,6 +70,15 @@ const calculateGrade = (score, maxScore, passingPercentage, settings) => {
   return finalGrade;
 };
 
+// --- Global numeric parser (centralized) ---
+function toNum(v) {
+  if (v === '' || v === null || v === undefined) return NaN;
+  const n = parseFloat(String(v).replace(',', '.'));
+  return isNaN(n) ? NaN : n;
+}
+
+
+
 const generateId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 const saveStateToLocalStorage = (state) => {
@@ -337,7 +346,18 @@ const GlobalSettings = React.memo(({ settings, setSettings }) => {
           <input type="text" value={displayValues[k]} onChange={e => handleDisplayChange(k, e.target.value)} onBlur={() => handleBlur(k)} className="mt-1 w-full p-2 border rounded-md"/>
         </div>
       ))}
-    </div>
+    
+      <div className="pt-2 mt-1 border-t">
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={!!settings.showAdvanced}
+            onChange={e => setSettings(p => ({ ...p, showAdvanced: e.target.checked }))}
+          />
+          <span>Mostrar datos avanzados (promedios por evaluación y no aprobadas)</span>
+        </label>
+      </div>
+</div>
   );
 });
 
@@ -409,7 +429,7 @@ const StudentRow = React.memo(({
     <tr className={`group h-14 ${student.highlight ? `highlight-${student.highlight}` : ''}`}>
       {evaluations.map((ev, e) => (
         <React.Fragment key={ev.id}>
-          <td className={`p-1 text-sm text-center ${!student.highlight && e % 2 !== 0 ? 'bg-gray-50' : ''}`}>
+          <td className={`p-1 text-sm text-center w-20 ${!student.highlight && e % 2 !== 0 ? 'bg-gray-50' : ''}`}>
             <input
               type="text"
               value={student.scores[e] ?? ''}
@@ -421,7 +441,7 @@ const StudentRow = React.memo(({
               className="w-20 text-center bg-transparent focus:bg-yellow-100 p-2 rounded"
             />
           </td>
-          <td className={`p-1 text-sm text-center font-bold ${
+          <td className={`p-1 text-sm text-center font-bold w-20 ${
               !isNaN(rowData.grades[e]) && (rowData.grades[e] >= globalSettings.passingGrade ? 'grade-pass' : 'grade-fail')
             } ${!student.highlight && e % 2 !== 0 ? 'bg-gray-50' : ''}`}>
             {isNaN(rowData.grades[e]) ? 'N/A' : rowData.grades[e].toFixed(1)}
@@ -442,7 +462,34 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
   const [openDropdownEvalId, setOpenDropdownEvalId] = React.useState(null);
   const [draggedIndex, setDraggedIndex] = React.useState(null);
   const [dragOverIndex, setDragOverIndex] = React.useState(null);
-  const inputRefs = React.useRef({});
+  
+  // Advanced stats (per-evaluation averages and fail counts)
+  const advancedStats = React.useMemo(() => {
+    if (!globalSettings?.showAdvanced) return null;
+    const avg = [];
+    const fails = [];
+    for (let i = 0; i < sheet.evaluations.length; i++) {
+      let sum = 0, count = 0, fail = 0;
+      const ev = sheet.evaluations[i];
+      for (let r = 0; r < sheet.studentData.length; r++) {
+        const st = sheet.studentData[r];
+        let maxScore = ev.maxScore;
+        if (ev.differentiatedScores?.enabled && st.highlight) {
+          const v = toNum(ev.differentiatedScores[st.highlight]);
+          if (!isNaN(v) && v > 0) maxScore = v;
+        }
+        const grade = calculateGrade(toNum(st.scores[i]), toNum(maxScore), toNum(ev.exigency), globalSettings);
+        if (!isNaN(grade)) {
+          sum += grade; count++;
+          if (grade < globalSettings.passingGrade) fail++;
+        }
+      }
+      avg.push(count ? (sum / count) : NaN);
+      fails.push(fail);
+    }
+    return { avg, fails };
+  }, [globalSettings, sheet.studentData, sheet.evaluations]);
+const inputRefs = React.useRef({});
   const [editingRow, setEditingRow] = React.useState(null);
 
   const handleSaveDiffScores = React.useCallback((updatedEval) => {
@@ -581,10 +628,32 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
         </tr>
       ))}
       </tbody>
+
+      {globalSettings?.showAdvanced && (
+        <tfoot className="bg-gray-50">
+          <tr className="h-10">
+            <td className="p-1 w-12"></td>
+            <td className="p-1 text-xs text-gray-700">Promedios por evaluación</td>
+          </tr>
+          <tr className="h-10">
+            <td className="p-1 w-12"></td>
+            <td className="p-1 text-xs text-gray-700">No aprobadas</td>
+          </tr>
+        </tfoot>
+      )}
     </table>, studentRoot) : null;
 
   const GradesColumnPortal = gradesRoot ? ReactDOM.createPortal(
-    <table className="min-w-full border-separate" style={{ borderSpacing: 0 }}>
+    <table className="min-w-full table-fixed border-collapse" >
+      <colgroup>
+        {sheet.evaluations.map((ev, i) => (
+          <React.Fragment key={ev.id}>
+            <col className="w-20" />
+            <col className="w-20" />
+          </React.Fragment>
+        ))}
+      </colgroup>
+
       <thead className="bg-gray-50">
       <tr className="h-16">
         {sheet.evaluations.map((ev, i) => (
@@ -632,6 +701,27 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
             inputRefs={inputRefs} setEditingRow={setEditingRow}/>
     ))}
       </tbody>
+
+      {globalSettings?.showAdvanced && advancedStats && (
+        <tfoot className="bg-gray-50">
+          <tr className="h-10">
+            {sheet.evaluations.map((ev, i) => (
+              <React.Fragment key={ev.id}>
+                <td className="p-1 w-20"></td>
+                <td className="p-1 w-20 text-xs font-semibold text-gray-700">{isNaN(advancedStats.avg[i]) ? '—' : advancedStats.avg[i].toFixed(1)}</td>
+              </React.Fragment>
+            ))}
+          </tr>
+          <tr className="h-10">
+            {sheet.evaluations.map((ev, i) => (
+              <React.Fragment key={ev.id}>
+                <td className="p-1 w-20"></td>
+                <td className="p-1 w-20 text-xs text-gray-700">No aprob.: {advancedStats.fails[i]}</td>
+              </React.Fragment>
+            ))}
+          </tr>
+        </tfoot>
+      )}
     </table>, gradesRoot) : null;
 
   return (
@@ -651,7 +741,7 @@ const App = () => {
   const defaultState = {
     sheets: [],
     activeSheetId: null,
-    globalSettings: { minGrade: 1.0, passingGrade: 4.0, maxGrade: 7.0 }
+    globalSettings: { minGrade: 1.0, passingGrade: 4.0, maxGrade: 7.0, showAdvanced: false }
   };
   const getInitialState = () => {
     const loaded = loadStateFromLocalStorage();
