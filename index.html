@@ -3,17 +3,39 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
   <title>Calculadora de Notas</title>
+  <meta name="theme-color" content="#f3f4f6">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script>
+    // Lazy loader for XLSX (shared by Import/Export)
+    window.loadXLSX = function() {
+      if (window.XLSX) return Promise.resolve(window.XLSX);
+      if (window.__loadingXLSX) return window.__loadingXLSX;
+      window.__loadingXLSX = new Promise(function(resolve, reject) {
+        var s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        s.async = true;
+        s.onload = function(){ resolve(window.XLSX); };
+        s.onerror = function(){ reject(new Error('No se pudo cargar XLSX.')); };
+        document.head.appendChild(s);
+      });
+      return window.__loadingXLSX;
+    };
+  </script>
+
   <style>
     body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; color: #1f2937; }
+    body.dark { background-color:#0f172a !important; color:#e5e7eb !important; }
     .grade-fail { color: #dc2626; font-weight: bold; }
     .grade-pass { color: #1d4ed8; font-weight: bold; }
     .tab.active { border-bottom-color: white; }
@@ -22,14 +44,83 @@
     .highlight-blue { background-color: #dbeafe !important; }
     input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     input[type=number] { -moz-appearance: textfield; }
-    .resize-handle { position: absolute; right: -2px; top: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 20; background-color: #3b82f6; }
+    .resize-handle { display: none !important; }
     .dragging-over-col { border-right: 3px solid #3b82f6; }
     .draggable-header { cursor: grab; }
     .draggable-header:active { cursor: grabbing; }
     .dragging-over-tab { border-right: 3px solid #3b82f6; opacity: 0.7; }
     .draggable-tab { cursor: grab; }
     .draggable-tab:active { cursor: grabbing; }
-  </style>
+  
+    /* Dark mode helpers */
+    body.dark .modal-card,
+    body.dark .card { background-color:#1f2937; color:#e5e7eb; }
+    body.dark .border, body.dark .border-b-2, body.dark .border-b { border-color:#374151 !important; }
+    body.dark .bg-white { background-color:#1f2937 !important; }
+    body.dark .bg-gray-50 { background-color:#111827 !important; }
+    body.dark input, body.dark textarea, body.dark select {
+      background-color:#1f2937 !important; color:#e5e7eb !important; border-color:#374151 !important;
+    }
+    body.dark .hover\:bg-gray-50:hover { background-color:#1f2937 !important; }
+    .resize-handle { display: none !important; } /* ya estaba, la mantenemos */
+    
+    body.dark .text-gray-700, body.dark .text-gray-600, body.dark .text-gray-500 { color:#d1d5db !important; }
+    body.dark .bg-gray-50, body.dark .bg-gray-100, body.dark .bg-blue-50, body.dark .bg-green-50 { background-color: rgba(255,255,255,0.04) !important; }
+    body.dark .divide-gray-200 { --tw-divide-opacity:1; border-color:#374151 !important; }
+    body.dark .border-gray-200 { border-color:#374151 !important; }
+    body.dark .hover\:bg-gray-50:hover, body.dark .hover\:bg-gray-100:hover { background-color:#1f2937 !important; }
+    body.dark .focus\:bg-yellow-100:focus { background-color: rgba(250,204,21,0.12) !important; }
+
+    
+    /* --- Dark mode specific adjustments --- */
+    body.dark .highlight-green { background-color: rgba(34,197,94,0.15) !important; }   /* emerald-500 at ~15% */
+    body.dark .highlight-yellow { background-color: rgba(234,179,8,0.18) !important; }  /* amber-500 */
+    body.dark .highlight-blue { background-color: rgba(59,130,246,0.16) !important; }   /* blue-500 */
+    body.dark .bg-green-50 { background-color: rgba(34,197,94,0.12) !important; }
+    body.dark .text-gray-800 { color:#f3f4f6 !important; }
+
+    
+    /* Dark-mode fixes for sheet tabs */
+    body.dark .tab { color: #e5e7eb; }
+    body.dark .tab.active { background-color: #1f2937; border-bottom-color: #1f2937; }
+    body.dark .tab:not(.active) { background-color: #374151; }
+    
+    
+    /* Contrast tweaks for dark mode */
+    body.dark .grade-pass { color: #93c5fd !important; } /* blue-300 for readability on dark */
+    body.dark .grade-fail { color: #f87171 !important; } /* red-400 */
+    body.dark .text-gray-500 { color: #cbd5e1 !important; } /* slate-300 */
+    body.dark .text-gray-600 { color: #d1d5db !important; } /* gray-300 */
+    body.dark .text-gray-700 { color: #e5e7eb !important; } /* gray-200 */
+    body.dark .placeholder-gray-400::placeholder { color:#94a3b8 !important; }
+    body.dark .btn-muted { background-color: rgba(148,163,184,0.18) !important; color:#e5e7eb !important; border-color:#475569 !important; }
+
+    
+    /* Explicitly declare color-scheme to prevent browser auto-dark inversion */
+    html { color-scheme: light; }
+    body.dark { color-scheme: dark; }
+    /* Guard light backgrounds so UA heuristics don't darken them */
+    html:not(.dark) body { background-color: #f3f4f6; }
+
+    
+    /* Light mode column background fixes (Chrome/Edge with forced dark off) */
+    body:not(.dark) .bg-white { background-color: #ffffff !important; }
+    body:not(.dark) .bg-gray-50 { background-color: #f9fafb !important; }
+    body:not(.dark) .bg-gray-100 { background-color: #f3f4f6 !important; }
+
+    
+    /* Ensure light-mode text is dark even if browser dark mode is on */
+    body:not(.dark) .text-gray-500,
+    body:not(.dark) .text-gray-600,
+    body:not(.dark) .text-gray-700,
+    body:not(.dark) .text-gray-800,
+    body:not(.dark) .text-gray-900 {
+        color: #111827 !important; /* gray-900 */
+    }
+    body:not(.dark) .placeholder-gray-400::placeholder { color: #6b7280 !important; }
+
+    </style>
+    
 
   <!-- Firebase SDKs (Compat) -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -68,7 +159,7 @@
     })();
   </script>
 </head>
-<body>
+<body class="bg-gray-50 dark:bg-gray-900 dark:text-gray-100">
 <div id="root"></div>
 <div id="portal-root"></div>
 
@@ -173,19 +264,19 @@ const AddEvalDropdown = React.memo(({ onAdd, onClose }) => {
   };
 
   return (
-    <div ref={dropdownRef} className="absolute top-full right-0 mt-2 w-64 bg-white rounded-md shadow-lg z-30 p-4 border">
+    <div ref={dropdownRef} className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-md shadow-lg z-30 p-4 border dark:border-gray-700">
       <div className="space-y-3">
         <div>
           <label className="block text-sm font-medium text-gray-700">Nombre</label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"/>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">Puntaje Máximo</label>
-          <input type="text" value={maxScore} onChange={e => { const n = normalizeNumberInput(e.target.value); if (n !== null) setMaxScore(n); }} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+          <input type="text" value={maxScore} onChange={e => { const n = normalizeNumberInput(e.target.value); if (n !== null) setMaxScore(n); }} className="mt-1 block w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"/>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">Exigencia (%)</label>
-          <input type="text" value={exigency} onChange={e => { const n = normalizeNumberInput(e.target.value); if (n !== null) setExigency(n); }} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+          <input type="text" value={exigency} onChange={e => { const n = normalizeNumberInput(e.target.value); if (n !== null) setExigency(n); }} className="mt-1 block w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"/>
         </div>
         <div className="flex justify-end">
           <button onClick={handleSubmit} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Añadir</button>
@@ -222,11 +313,11 @@ const DiffScoreDropdown = ({ evaluation, onSave, onClose }) => {
   };
 
   const dropdownContent = (
-    <div ref={dropdownRef} className="absolute bg-white rounded-md shadow-lg z-[9999] p-4 border w-64" style={{ top: `${position.top}px`, left: `${position.left}px` }}>
+    <div ref={dropdownRef} className="absolute bg-white dark:bg-gray-800 dark:text-gray-100 rounded-md shadow-lg z-[9999] p-4 border dark:border-gray-700 w-64" style={{ top: `${position.top}px`, left: `${position.left}px` }}>
       <div className="space-y-3">
         <div className="flex items-center">
           <input type="checkbox" checked={evalData.differentiatedScores.enabled} onChange={handleToggle} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-          <label className="ml-2 block text-sm text-gray-900">Habilitar diferenciados</label>
+          <label className="ml-2 block text-sm text-gray-900 dark:text-gray-100">Habilitar diferenciados</label>
         </div>
         {evalData.differentiatedScores.enabled && (
           <div className="space-y-2">
@@ -284,7 +375,7 @@ const ImportConfirmationModal = ({ pending, existingSheets, onConfirmReplace, on
 
   const modalContent = (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
-      <div ref={modalRef} className="bg-white p-5 rounded-lg shadow-xl w-[min(1000px,95vw)] max-h-[85vh] flex flex-col">
+      <div ref={modalRef} className="bg-white dark:bg-gray-800 dark:text-gray-100 p-5 rounded-lg shadow-xl w-[min(1000px,95vw)] max-h-[85vh] flex flex-col">
         <h3 className="text-lg font-bold mb-1">Importar hojas desde Excel</h3>
         <p className="text-sm text-gray-600 mb-3">
           Se detectaron <strong>{summary.totals.sheets}</strong> hoja(s), <strong>{summary.totals.students}</strong> alumno(s) totales y <strong>{summary.totals.evaluations}</strong> evaluación(es) en total.
@@ -329,7 +420,7 @@ const ImportConfirmationModal = ({ pending, existingSheets, onConfirmReplace, on
         )}
 
         <div className="flex justify-end gap-2 mt-4">
-          <button onClick={onCancel} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">Cancelar</button>
+          <button onClick={onCancel} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600">Cancelar</button>
           <button onClick={onConfirmAdd} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Añadir a las existentes</button>
           <button onClick={onConfirmReplace} className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Reemplazar todo</button>
         </div>
@@ -369,10 +460,10 @@ const SettingsPopover = ({ anchorId, open, onClose, children }) => {
   if (!open) return null;
 
   const content = (
-    <div ref={popRef} className="absolute z-[10001] bg-white border rounded-lg shadow-xl w-[320px] p-4"
+    <div ref={popRef} className="absolute z-[10001] bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg shadow-xl w-[320px] p-4"
          style={{ top: pos.top, left: pos.left }} role="dialog" aria-modal="true">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-700">Configuración de Escala de Notas</h3>
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Configuración de Escala de Notas</h3>
         <button onClick={onClose} aria-label="Cerrar" className="text-gray-500 hover:text-red-600">&times;</button>
       </div>
       {children}
@@ -427,11 +518,11 @@ const Header = React.memo(({
   };
 
   return (
-    <header className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b-2 border-gray-200">
+    <header className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b-2 border-gray-200 dark:border-gray-700">
       <div className="flex items-center gap-2">
-        <h1 className="text-3xl font-bold text-gray-800">Calculadora de Notas</h1>
+        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 dark:text-gray-100">Calculadora de Notas</h1>
         <button id="settings-btn" onClick={onToggleSettings}
-                className="ml-1 px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 rounded-md flex items-center gap-1"
+                className="ml-1 px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-md flex items-center gap-1"
                 aria-haspopup="dialog" aria-expanded="false">
           <span>Configuración</span> <span>⚙️</span>
         </button>
@@ -441,24 +532,24 @@ const Header = React.memo(({
       </div>
       <div className="flex items-center space-x-2 mt-4 sm:mt-0">
         <div className="relative">
-          <button aria-label="Añadir nueva evaluación" onClick={() => setAddEvalDropdownOpen(prev => !prev)} disabled={!activeSheet} className="px-4 py-2 bg-green-500 text-white rounded-md shadow-sm hover:bg-green-600 disabled:bg-gray-300">Añadir Evaluación</button>
+          <button aria-label="Añadir nueva evaluación" onClick={() => setAddEvalDropdownOpen(prev => !prev)} disabled={!activeSheet} className="px-4 py-2 bg-green-500 dark:bg-green-600 text-white rounded-md shadow-sm hover:bg-green-600 dark:hover:bg-green-500 disabled:bg-gray-300 dark:disabled:bg-gray-600 dark:disabled:text-gray-400">Añadir Evaluación</button>
           {isAddEvalDropdownOpen && <AddEvalDropdown onAdd={onAddEvaluation} onClose={() => setAddEvalDropdownOpen(false)} />}
         </div>
-        <button aria-label="Añadir nuevo alumno" onClick={onAddStudent} disabled={!activeSheet} className="px-4 py-2 bg-blue-500 text-white rounded-md shadow-sm hover:bg-blue-600 disabled:bg-gray-300">Añadir Alumno</button>
+        <button aria-label="Añadir nuevo alumno" onClick={onAddStudent} disabled={!activeSheet} className="px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-600 dark:hover:bg-blue-500 disabled:bg-gray-300 dark:disabled:bg-gray-600 dark:disabled:text-gray-400">Añadir Alumno</button>
         
         {/* Import dropdown */}
         <div ref={importRef} className="relative inline-block">
           <button onClick={() => setImportOpen(v => !v)}
-                  className="px-4 py-2 bg-gray-700 text-white rounded-md shadow-sm hover:bg-gray-800">
+                  className="px-4 py-2 bg-gray-700 dark:bg-gray-700 text-white rounded-md shadow-sm hover:bg-gray-800 dark:hover:bg-gray-600">
             Importar ▾
           </button>
           {importOpen && (
-            <div className="absolute right-0 mt-2 w-56 bg-white border rounded shadow z-30">
-              <button className="w-full text-left px-3 py-2 hover:bg-gray-50"
-                      onClick={() => { setImportOpen(false); fileInputRef.current && fileInputRef.current.click(); }}>
+            <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 dark:text-gray-100 border dark:border-gray-700 rounded shadow z-30">
+              <button className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      onClick={() => { setImportOpen(false); window.loadXLSX().finally(() => { fileInputRef.current && fileInputRef.current.click(); }); }}>
                 Desde Excel (.xlsx)
               </button>
-              <button className="w-full text-left px-3 py-2 hover:bg-gray-50"
+              <button className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700"
                       onClick={() => { setImportOpen(false); onOpenLoadByCode(); }}>
                 Desde código (Firebase)
               </button>
@@ -471,12 +562,12 @@ const Header = React.memo(({
         <div ref={menuRef} className="relative inline-block">
           <button onClick={() => setMenuOpen(v => !v)}
                   disabled={sheetsCount === 0 && shareDisabled}
-                  className="px-4 py-2 bg-orange-500 text-white rounded-md shadow-sm hover:bg-orange-600 disabled:bg-gray-300">
+                  className="px-4 py-2 bg-orange-500 dark:bg-orange-600 text-white rounded-md shadow-sm hover:bg-orange-600 dark:hover:bg-orange-500 disabled:bg-gray-300 dark:disabled:bg-gray-600 dark:disabled:text-gray-400">
             Exportar / Compartir ▾
           </button>
           {menuOpen && (
-            <div className="absolute right-0 mt-2 w-64 bg-white border rounded shadow z-30">
-              <button className="w-full text-left px-3 py-2 hover:bg-gray-50"
+            <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 dark:text-gray-100 border dark:border-gray-700 rounded shadow z-30">
+              <button className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700"
                       onClick={() => { setMenuOpen(false); onExport(); }}>
                 Exportar a Excel (.xlsx)
               </button>
@@ -535,10 +626,22 @@ const GlobalSettings = React.memo(({ settings, setSettings }) => {
           />
           <span>Mostrar datos avanzados (promedios por evaluación y no aprobadas)</span>
         </label>
+      
+      <div className="pt-2 mt-1">
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input
+            type="checkbox"
+            checked={!!settings.darkMode}
+            onChange={e => setSettings(p => ({ ...p, darkMode: e.target.checked }))}
+          />
+          <span>Activar modo nocturno</span>
+        </label>
       </div>
-</div>
+    </div>
+    </div>
   );
 });
+
 
 const Tabs = React.memo(({ sheets, activeSheetId, onSelectTab, onDeleteTab, onRenameTab, onAddTab, onReorderSheets }) => {
   const [editingId, setEditingId] = React.useState(null);
@@ -553,10 +656,10 @@ const Tabs = React.memo(({ sheets, activeSheetId, onSelectTab, onDeleteTab, onRe
   const handleDragEnd = () => { setDraggedIndex(null); setDragOverIndex(null); };
 
   return (
-    <div className="flex border-b border-gray-200">
+    <div className="flex border-b border-gray-200 dark:border-gray-700">
       {sheets.map((s, i) => (
         <div key={s.id}
-             className={`tab flex items-center px-4 py-2 border-t border-l border-r rounded-t-lg cursor-pointer -mb-px draggable-tab ${activeSheetId === s.id ? 'active bg-white font-semibold' : 'bg-gray-200'} ${dragOverIndex === i ? 'dragging-over-tab' : ''}`}
+             className={`tab flex items-center px-4 py-2 border-t border-l border-r rounded-t-lg cursor-pointer -mb-px draggable-tab ${activeSheetId === s.id ? 'active bg-white dark:bg-gray-800 font-semibold' : 'bg-gray-200 dark:bg-gray-700 dark:text-gray-200'} ${dragOverIndex === i ? 'dragging-over-tab' : ''}`}
              onClick={() => onSelectTab(s.id)}
              onDoubleClick={() => { setEditingId(s.id); setName(s.name); }}
              draggable="true"
@@ -573,7 +676,7 @@ const Tabs = React.memo(({ sheets, activeSheetId, onSelectTab, onDeleteTab, onRe
           )}
         </div>
       ))}
-      <button aria-label="Añadir nueva hoja" onClick={onAddTab} className="px-4 py-2 bg-gray-200 rounded-t-lg hover:bg-gray-300">+</button>
+      <button aria-label="Añadir nueva hoja" onClick={onAddTab} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 dark:text-gray-200 rounded-t-lg hover:bg-gray-300 dark:hover:bg-gray-600">+</button>
     </div>
   );
 });
@@ -679,7 +782,10 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
   const [studentRoot, setStudentRoot] = React.useState(null);
   const [gradesRoot, setGradesRoot] = React.useState(null);
   const [openDropdownEvalId, setOpenDropdownEvalId] = React.useState(null);
-  const [draggedIndex, setDraggedIndex] = React.useState(null);
+  
+  // Nuevo: contenedor para portal de barra de redimensionamiento que cubre toda la columna
+  const [tableContainer, setTableContainer] = React.useState(null);
+const [draggedIndex, setDraggedIndex] = React.useState(null);
   const [dragOverIndex, setDragOverIndex] = React.useState(null);
   
   // Advanced stats (per-evaluation averages and fail counts)
@@ -824,7 +930,7 @@ const inputRefs = React.useRef({});
     <button
       id="student-list-gear"
       onClick={() => setStudentListOpen(true)}
-      className="ml-2 px-2 py-1 text-sm bg-gray-200 hover:bg-gray-300 rounded shadow-sm"
+      className="ml-2 px-2 py-1 text-sm bg-gray-200 dark:bg-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 rounded shadow-sm"
       title="Editar lista de alumnos (pegar o escribir)"
       aria-label="Editar lista de alumnos"
     >⚙️</button>
@@ -840,7 +946,7 @@ const inputRefs = React.useRef({});
         <tr key={s.id} className={`group h-14 ${s.highlight ? `highlight-${s.highlight}`:''}`}>
           <td className="p-4 text-sm relative text-center">{r+1}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button aria-label={`Eliminar estudiante ${s.name}`} onClick={()=>delStudent(r)} className="p-1 bg-white rounded shadow hover:bg-red-100"><span className="text-red-500 font-bold">×</span></button>
+              <button aria-label={`Eliminar estudiante ${s.name}`} onClick={()=>delStudent(r)} className="p-1 bg-white dark:bg-gray-800 rounded shadow hover:bg-red-100 dark:hover:bg-gray-700"><span className="text-red-500 font-bold">×</span></button>
             </div>
           </td>
           <td className="p-1 text-sm">
@@ -849,7 +955,7 @@ const inputRefs = React.useRef({});
   type="text"
   value={s.name}
   onChange={e => handleNameChange(r, e.target.value)}
-  className={`bg-transparent w-full focus:bg-yellow-100 p-2 rounded ${editingRow === r ? 'font-bold text-blue-700' : ''}`}
+  className={`bg-transparent w-full focus:bg-yellow-100 p-2 rounded ${editingRow === r ? 'font-bold text-blue-700 dark:text-blue-300' : ''}`}
 />
               <button aria-label="Cambiar color de resaltado" onClick={() => handleHighlight(r)} className="ml-2 text-xl text-gray-500 hover:text-blue-600" title="Cambiar color">🎨</button>
             </div>
@@ -891,13 +997,13 @@ const inputRefs = React.useRef({});
               draggable="true"
               onDragStart={(e) => handleDragStart(e, i)} onDragOver={(e) => handleDragOver(e, i)} onDrop={(e) => handleDrop(e, i)} onDragEnd={handleDragEnd} onDragLeave={() => setDragOverIndex(null)}>
             <div className="flex justify-center items-center">
-              <input type="text" value={ev.name} onChange={e => handleEvalNameChange(i, e.target.value)} className="font-bold text-base bg-transparent w-full text-center focus:bg-yellow-100 px-1 rounded"/>
+              <input type="text" value={ev.name} onChange={e => handleEvalNameChange(i, e.target.value)} className="font-bold text-base bg-transparent w-full text-center focus:bg-yellow-100 px-1 rounded dark:text-gray-100"/>
               <div className="relative">
                 <button aria-label={`Configuración para ${ev.name}`} data-dropdown-id={ev.id} onClick={() => setOpenDropdownEvalId(openDropdownEvalId === ev.id ? null : ev.id)} className="ml-2 text-lg text-gray-500 hover:text-blue-600">⚙️</button>
                 {openDropdownEvalId === ev.id && <DiffScoreDropdown evaluation={ev} onSave={handleSaveDiffScores} onClose={() => setOpenDropdownEvalId(null)} />}
               </div>
               <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button aria-label={`Eliminar evaluación ${ev.name}`} onClick={() => delEval(i)} className="p-1 bg-white rounded shadow hover:bg-red-100"><span className="text-red-500 font-bold">×</span></button>
+                <button aria-label={`Eliminar evaluación ${ev.name}`} onClick={() => delEval(i)} className="p-1 bg-white dark:bg-gray-800 rounded shadow hover:bg-red-100 dark:hover:bg-gray-700"><span className="text-red-500 font-bold">×</span></button>
               </div>
             </div>
           </th>
@@ -909,9 +1015,9 @@ const inputRefs = React.useRef({});
           <th key={ev.id} colSpan="2" className={`p-1 ${i % 2 !== 0 ? 'bg-gray-100' : ''}`}>
             <div className="flex justify-center items-center space-x-2">
               <label className="text-xs">P.Máx:</label>
-              <input type="text" value={ev.maxScore} onChange={e => handleEvalHeaderChange(i, 'maxScore', e.target.value)} className="w-16 p-1 text-xs border rounded" />
+              <input type="text" value={ev.maxScore} onChange={e => handleEvalHeaderChange(i, 'maxScore', e.target.value)} className="w-16 p-1 text-xs border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100" />
               <label className="text-xs">Exig:</label>
-              <input type="text" value={ev.exigency} onChange={e => handleEvalHeaderChange(i, 'exigency', e.target.value)} className="w-16 p-1 text-xs border rounded"/>
+              <input type="text" value={ev.exigency} onChange={e => handleEvalHeaderChange(i, 'exigency', e.target.value)} className="w-16 p-1 text-xs border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"/>
             </div>
           </th>)}
       </tr>
@@ -954,14 +1060,26 @@ const inputRefs = React.useRef({});
     </table>, gradesRoot) : null;
 
   return (
-    <div className="bg-white p-2 sm:p-4 rounded-b-lg shadow-md flex">
+    <div className="bg-white dark:bg-gray-800 dark:text-gray-100 p-2 sm:p-4 rounded-b-lg shadow-md flex relative" ref={setTableContainer}>
       <div ref={setStudentRoot} className="relative flex-shrink-0"></div>
       <div ref={setGradesRoot} className="overflow-x-auto flex-grow"></div>
       {StudentColumnPortal}
+      {/* Barra de resize a toda altura, pegada a la derecha del bloque de alumnos */}
+      {studentRoot && ReactDOM.createPortal(
+        <div
+          className="absolute top-0 bottom-0 cursor-col-resize z-30"
+          style={{ right: '-2px', width: '5px', backgroundColor: '#b8b8b8' }}
+          onMouseDown={handleColumnResize}
+          title="Arrastra para cambiar el ancho de la columna de alumnos"
+        />,
+        studentRoot
+      )}
+
+
       
       {studentListOpen && ReactDOM.createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
-          <div className="bg-white rounded-lg shadow-xl w-[min(900px,95vw)] max-h-[85vh] p-5 flex flex-col">
+          <div className="bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg shadow-xl w-[min(900px,95vw)] max-h-[85vh] p-5 flex flex-col">
             <h3 className="text-lg font-semibold mb-2">Lista de alumnos</h3>
             <p className="text-sm text-gray-600 mb-3">
               Pega o escribe un alumno por línea (también acepta comas o tabulaciones).
@@ -976,9 +1094,9 @@ const inputRefs = React.useRef({});
             <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
               <div>Actual: {sheet.studentData.length} alumnos · Evaluaciones: {sheet.evaluations.length}</div>
               <div className="space-x-2">
-                <button onClick={() => setStudentListOpen(false)} className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300">Cancelar</button>
-                <button onClick={addToStudentList} className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Añadir (únicos)</button>
-                <button onClick={replaceStudentList} className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700">Reemplazar</button>
+                <button onClick={() => setStudentListOpen(false)} className="px-3 py-2 bg-gray-200 dark:bg-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600">Cancelar</button>
+                <button onClick={addToStudentList} className="px-3 py-2 bg-blue-600 dark:bg-blue-600 text-white rounded hover:bg-blue-700 dark:hover:bg-blue-500">Añadir (únicos)</button>
+                <button onClick={replaceStudentList} className="px-3 py-2 bg-red-600 dark:bg-red-600 text-white rounded hover:bg-red-700 dark:hover:bg-red-500">Reemplazar</button>
               </div>
             </div>
           </div>
@@ -1009,13 +1127,13 @@ const App = () => {
   const defaultState = {
     sheets: [],
     activeSheetId: null,
-    globalSettings: { minGrade: 1.0, passingGrade: 4.0, maxGrade: 7.0, showAdvanced: false }
+    globalSettings: { minGrade: 1.0, passingGrade: 4.0, maxGrade: 7.0, showAdvanced: false, darkMode: false }
   };
   const getInitialState = () => {
     const loaded = loadStateFromLocalStorage();
     if (loaded) {
       const sheetsWithWidth = (loaded.sheets || []).map(sheet => ({ ...sheet, studentColumnWidth: sheet.studentColumnWidth || 200 }));
-      return { ...defaultState, ...loaded, sheets: sheetsWithWidth, globalSettings: { ...defaultState.globalSettings, ...(loaded.globalSettings || {}) } };
+      return { ...defaultState, ...loaded, sheets: sheetsWithWidth, globalSettings: { ...defaultState.globalSettings, ...(loaded.globalSettings || {}) }, firebaseCode: loaded.firebaseCode || '' };
     }
     return defaultState;
   };
@@ -1023,7 +1141,16 @@ const App = () => {
   const [sheets, setSheets] = React.useState(initial.sheets);
   const [activeSheetId, setActiveSheetId] = React.useState(initial.activeSheetId);
   const [globalSettings, setGlobalSettings] = React.useState(initial.globalSettings);
-  const [pendingImport, setPendingImport] = React.useState(null);
+
+  // Toggle body class for dark mode
+  React.useEffect(() => {
+    if (globalSettings?.darkMode) {
+      document.body.classList.add('dark');
+    } else {
+      document.body.classList.remove('dark');
+    }
+  }, [globalSettings?.darkMode]);
+const [pendingImport, setPendingImport] = React.useState(null);
 
   // Nuevos estados de guardado e interfaz
   const [isSaving, setIsSaving] = React.useState(false);
@@ -1058,7 +1185,7 @@ const App = () => {
 
   // --- Compartir por código (Firestore) ---
   const [shareOpen, setShareOpen] = React.useState(false);
-  const [shareCode, setShareCode] = React.useState('');
+  const [shareCode, setShareCode] = React.useState(initial.firebaseCode || '');
   const [openLoadByCode, setOpenLoadByCode] = React.useState(false);
   const [codeInput, setCodeInput] = React.useState('');
 
@@ -1133,11 +1260,34 @@ const App = () => {
   const handleLoadByCodeAdd = () => loadByCode(false);
   const handleLoadByCodeReplace = () => loadByCode(true);
 
-  // Guardar con debounce en localStorage + indicador
+
+  // Auto-restaurar desde Firebase si había un código guardado
+  React.useEffect(() => {
+    const code = (initial.firebaseCode || '').toUpperCase();
+    if (!code) return;
+    if (!window.__FB_DB__) return;
+    (async () => {
+      try {
+        const snap = await window.__FB_DB__.collection('gradeSheets').doc(code).get();
+        if (snap.exists) {
+          const data = snap.data() || {};
+          const incoming = Array.isArray(data.sheets) ? data.sheets : [];
+          setSheets(incoming);
+          setActiveSheetId(data.activeSheetId || (incoming[0] && incoming[0].id) || null);
+          setGlobalSettings(prev => ({ ...prev, ...(data.globalSettings || {}) }));
+          setShareCode(code);
+        }
+      } catch (e) {
+        console.warn('No se pudo restaurar la sesión Firebase guardada:', e);
+      }
+    })();
+  }, []);
+
+    // Guardar con debounce en localStorage + indicador
 	React.useEffect(() => {
     setIsSaving(true);
     const handler = setTimeout(() => {
-      saveStateToLocalStorage({ sheets, activeSheetId, globalSettings });
+      saveStateToLocalStorage({ sheets, activeSheetId, globalSettings, firebaseCode: shareCode });
       setIsSaving(false);
       setLastSaved(new Date());
     }, 500);
@@ -1199,8 +1349,9 @@ const App = () => {
 
   const handleFileImport = React.useCallback((file) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
+    window.loadXLSX().then(() => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
@@ -1251,6 +1402,7 @@ const App = () => {
       }
     };
     reader.readAsArrayBuffer(file);
+    }); // end loadXLSX then
   }, []);
 
   const handleConfirmReplace = () => {
@@ -1265,7 +1417,8 @@ const App = () => {
   };
 
   const handleExport = React.useCallback(() => {
-    const wb = XLSX.utils.book_new();
+    window.loadXLSX().then(() => {
+      const wb = XLSX.utils.book_new();
     sheets.forEach(sheet => {
       const processedData = sheet.studentData.map((student, index) => {
         let total = 0, count = 0;
@@ -1296,7 +1449,8 @@ const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       XLSX.utils.book_append_sheet(wb, ws, sheet.name);
     });
-    XLSX.writeFile(wb, 'calculadora_notas.xlsx');
+      XLSX.writeFile(wb, 'calculadora_notas.xlsx');
+    }); // end loadXLSX then
   }, [sheets, globalSettings]);
 
   // Atajos teclado
@@ -1311,7 +1465,7 @@ const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings
 
   return (
     <>
-      <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-screen">
+      <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
       {pendingImport && (
         <ImportConfirmationModal pending={pendingImport} existingSheets={sheets}
           onConfirmReplace={handleConfirmReplace}
@@ -1353,7 +1507,7 @@ const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings
           <GradesTable key={activeSheetId} sheet={activeSheet} onUpdateSheet={handleUpdateSheet} globalSettings={globalSettings} />
         </div>
       ) : (
-        <div className="text-center bg-white p-10 rounded-lg shadow-md">
+        <div className="text-center bg-white dark:bg-gray-800 dark:text-gray-100 p-10 rounded-lg shadow-md">
           <h2 className="text-2xl font-bold text-gray-700 mb-4">Comienza a Calcular Notas</h2>
           <p className="text-gray-500 mb-6">Puedes importar un archivo de Excel o crear una tabla manualmente.</p>
           <button onClick={handleCreateSheet} className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700">
@@ -1365,15 +1519,15 @@ const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings
       {/* Modal: Abrir por código */}
       {openLoadByCode && ReactDOM.createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
-          <div className="bg-white p-5 rounded-lg shadow-xl w-[min(420px,95vw)]">
+          <div className="bg-white dark:bg-gray-800 dark:text-gray-100 p-5 rounded-lg shadow-xl w-[min(420px,95vw)]">
             <h3 className="text-lg font-semibold mb-2">Abrir por código</h3>
             <p className="text-sm text-gray-600 mb-3">Ingresa el código compartido para añadir o reemplazar las hojas actuales:</p>
             <input value={codeInput} onChange={e => setCodeInput(e.target.value.toUpperCase())}
-                   className="border rounded px-2 py-2 w-full font-mono mb-4" placeholder="CÓDIGO" />
+                   className="border rounded px-2 py-2 w-full font-mono mb-4 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100" placeholder="CÓDIGO" />
             <div className="flex justify-end gap-2">
-              <button className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300" onClick={() => setOpenLoadByCode(false)}>Cancelar</button>
-              <button onClick={handleLoadByCodeAdd} className="px-3 py-2 bg-blue-600 text-white rounded">Añadir</button>
-              <button onClick={handleLoadByCodeReplace} className="px-3 py-2 bg-red-600 text-white rounded">Reemplazar</button>
+              <button className="px-3 py-2 bg-gray-200 dark:bg-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600" onClick={() => setOpenLoadByCode(false)}>Cancelar</button>
+              <button onClick={handleLoadByCodeAdd} className="px-3 py-2 bg-blue-600 dark:bg-blue-600 text-white rounded hover:bg-blue-700 dark:hover:bg-blue-500">Añadir</button>
+              <button onClick={handleLoadByCodeReplace} className="px-3 py-2 bg-red-600 dark:bg-red-600 text-white rounded hover:bg-red-700 dark:hover:bg-red-500">Reemplazar</button>
             </div>
           </div>
         </div>,
@@ -1382,16 +1536,16 @@ const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings
     {/* Modal: Código generado */}
       {shareOpen && ReactDOM.createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
-                    <div className="bg-white p-5 rounded-lg shadow-xl w-[min(420px,95vw)]">
+                    <div className="bg-white dark:bg-gray-800 dark:text-gray-100 p-5 rounded-lg shadow-xl w-[min(420px,95vw)]">
             <h3 className="text-lg font-semibold mb-2">Código de tabla</h3>
             <p className="text-sm text-gray-600 mb-3">Comparte este código para abrir esta tabla en otro dispositivo:</p>
             <div className="flex items-center gap-2 mb-4">
               <input className="border rounded px-2 py-1 w-full text-center font-mono text-lg" readOnly value={shareCode} />
-              <button className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300"
+              <button className="px-3 py-2 bg-gray-200 dark:bg-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
                 onClick={() => { navigator.clipboard?.writeText(shareCode); }}>Copiar</button>
             </div>
             <div className="flex justify-end">
-              <button className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300" onClick={() => setShareOpen(false)}>Cerrar</button>
+              <button className="px-3 py-2 bg-gray-200 dark:bg-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600" onClick={() => setShareOpen(false)}>Cerrar</button>
             </div>
           </div>
         </div>,
@@ -1411,6 +1565,21 @@ if (rootElement) {
 } else {
   console.error('No se encontró el elemento #root');
 }
+</script>
+<script>
+// Keep browser UI (address bar) in sync with our theme, and avoid UA auto dark.
+(function syncThemeColor(){
+  function apply() {
+    const dark = document.body.classList.contains('dark');
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', dark ? '#0f172a' : '#f3f4f6');
+    // On light theme, mark root as light to opt out of any UA darkening flags.
+    document.documentElement.classList.toggle('dark', false); // we use body.dark only
+  }
+  const mo = new MutationObserver(apply);
+  mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  apply();
+})();
 </script>
 </body>
 </html>
