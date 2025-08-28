@@ -485,7 +485,7 @@ const Header = React.memo(({
   onToggleSettings, 
   onShareByCode, 
   onOpenLoadByCode, 
-  shareDisabled 
+  shareDisabled, syncCode, onStopSync 
 }) => {
   // Dropdown states + refs
   const [importOpen, setImportOpen] = React.useState(false);
@@ -527,7 +527,7 @@ const Header = React.memo(({
           <span>Configuración</span> <span>⚙️</span>
         </button>
         <span className={`ml-2 text-sm ${isSaving ? 'text-yellow-600 animate-pulse' : 'text-green-600'}`}>
-          {isSaving ? 'Guardando…' : `✔ Guardado${lastSaved ? ' ' + lastSaved.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}`}
+          {isSaving ? 'Guardando…' : `✔ Guardado${lastSaved ? ' ' + lastSaved.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}`}{syncCode ? ` · Sync: ${syncCode}` : ''}
         </span>
       </div>
       <div className="flex items-center space-x-2 mt-4 sm:mt-0">
@@ -577,6 +577,15 @@ const Header = React.memo(({
                       onClick={() => { setMenuOpen(false); onShareByCode(); }}>
                 Generar código (Firebase)
               </button>
+              {syncCode && (
+                <>
+                  <div className="border-t my-1"></div>
+                  <button className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700"
+                          onClick={() => { setMenuOpen(false); onStopSync(); }}>
+                    Detener sincronización
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1128,12 +1137,14 @@ const App = () => {
     sheets: [],
     activeSheetId: null,
     globalSettings: { minGrade: 1.0, passingGrade: 4.0, maxGrade: 7.0, showAdvanced: false, darkMode: false }
+  ,
+    firebaseCode: ''
   };
   const getInitialState = () => {
     const loaded = loadStateFromLocalStorage();
     if (loaded) {
       const sheetsWithWidth = (loaded.sheets || []).map(sheet => ({ ...sheet, studentColumnWidth: sheet.studentColumnWidth || 200 }));
-      return { ...defaultState, ...loaded, sheets: sheetsWithWidth, globalSettings: { ...defaultState.globalSettings, ...(loaded.globalSettings || {}) }, firebaseCode: loaded.firebaseCode || '' };
+      return { ...defaultState, ...loaded, sheets: sheetsWithWidth, globalSettings: { ...defaultState.globalSettings, ...(loaded.globalSettings || {}) } };
     }
     return defaultState;
   };
@@ -1141,6 +1152,15 @@ const App = () => {
   const [sheets, setSheets] = React.useState(initial.sheets);
   const [activeSheetId, setActiveSheetId] = React.useState(initial.activeSheetId);
   const [globalSettings, setGlobalSettings] = React.useState(initial.globalSettings);
+  // Auto-reconnect to saved Firebase code
+  React.useEffect(() => {
+    if (initial.firebaseCode) {
+      startSync(initial.firebaseCode);
+      setShareCode(initial.firebaseCode);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   // Toggle body class for dark mode
   React.useEffect(() => {
@@ -1188,6 +1208,56 @@ const [pendingImport, setPendingImport] = React.useState(null);
   const [shareCode, setShareCode] = React.useState(initial.firebaseCode || '');
   const [openLoadByCode, setOpenLoadByCode] = React.useState(false);
   const [codeInput, setCodeInput] = React.useState('');
+  // --- Real-time sync (Firestore) ---
+  const [syncCode, setSyncCode] = React.useState('');
+  const syncUnsubRef = React.useRef(null);
+  const applyingRemoteRef = React.useRef(false);
+  const pendingUploadRef = React.useRef(null);
+
+  const startSync = React.useCallback((code) => {
+    if (!code || !window.__FB_DB__) return;
+    // Unsubscribe previous
+    if (syncUnsubRef.current) { syncUnsubRef.current(); syncUnsubRef.current = null; }
+    setSyncCode(code);
+    // Listen to doc changes
+    const docRef = window.__FB_DB__.collection('gradeSheets').doc(code);
+    syncUnsubRef.current = docRef.onSnapshot((snap) => {
+      if (!snap.exists) return;
+      const data = snap.data() || {};
+      applyingRemoteRef.current = true;
+      try {
+        const incoming = Array.isArray(data.sheets) ? data.sheets : [];
+        if (incoming.length) setSheets(incoming);
+        if (data.activeSheetId) setActiveSheetId(data.activeSheetId);
+        if (data.globalSettings) setGlobalSettings(prev => ({ ...prev, ...data.globalSettings }));
+      } finally {
+        setTimeout(() => { applyingRemoteRef.current = false; }, 0);
+      }
+    });
+  }, [setSheets, setActiveSheetId, setGlobalSettings]);
+
+  const stopSync = React.useCallback(() => {
+    if (syncUnsubRef.current) { syncUnsubRef.current(); syncUnsubRef.current = null; }
+    setSyncCode('');
+    setShareCode('');
+    // Clear persisted code so we don't auto-reconnect
+    const st = loadStateFromLocalStorage() || {};
+    saveStateToLocalStorage({ ...st, sheets, activeSheetId, globalSettings, firebaseCode: '' });
+  }, [sheets, activeSheetId, globalSettings]);
+
+  // Push local changes to Firestore if syncing (debounced)
+  React.useEffect(() => {
+    if (!syncCode || !window.__FB_DB__) return;
+    if (applyingRemoteRef.current) return;
+    const docRef = window.__FB_DB__.collection('gradeSheets').doc(syncCode);
+    if (pendingUploadRef.current) clearTimeout(pendingUploadRef.current);
+    pendingUploadRef.current = setTimeout(() => {
+      docRef.set({ sheets, activeSheetId, globalSettings, updatedAt: Date.now(), v: 2 }, { merge: true })
+        .catch(e => console.warn('Sync upload error', e));
+    }, 600);
+    return () => { if (pendingUploadRef.current) clearTimeout(pendingUploadRef.current); };
+  }, [sheets, activeSheetId, globalSettings, syncCode]);
+
 
   function generateShareCode(len = 7) {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -1219,6 +1289,8 @@ const [pendingImport, setPendingImport] = React.useState(null);
       await window.__FB_DB__.collection('gradeSheets').doc(code).set(payload);
       setShareCode(code);
       setShareOpen(true);
+      startSync(code);
+      saveStateToLocalStorage({ sheets, activeSheetId, globalSettings, firebaseCode: code });
     } catch (e) {
       console.error('Error al compartir por código', e);
       alert('No se pudo generar el código. Revisa la consola.');
@@ -1252,6 +1324,9 @@ const [pendingImport, setPendingImport] = React.useState(null);
       setGlobalSettings(prev => ({ ...prev, ...(data.globalSettings || {}) }));
       setOpenLoadByCode(false);
       setCodeInput('');
+      setShareCode(code);
+      startSync(code);
+      saveStateToLocalStorage({ sheets, activeSheetId, globalSettings, firebaseCode: code });
     } catch (e) {
       console.error('Error al cargar por código', e);
       alert('No se pudo cargar por código. Revisa la consola.');
@@ -1260,30 +1335,7 @@ const [pendingImport, setPendingImport] = React.useState(null);
   const handleLoadByCodeAdd = () => loadByCode(false);
   const handleLoadByCodeReplace = () => loadByCode(true);
 
-
-  // Auto-restaurar desde Firebase si había un código guardado
-  React.useEffect(() => {
-    const code = (initial.firebaseCode || '').toUpperCase();
-    if (!code) return;
-    if (!window.__FB_DB__) return;
-    (async () => {
-      try {
-        const snap = await window.__FB_DB__.collection('gradeSheets').doc(code).get();
-        if (snap.exists) {
-          const data = snap.data() || {};
-          const incoming = Array.isArray(data.sheets) ? data.sheets : [];
-          setSheets(incoming);
-          setActiveSheetId(data.activeSheetId || (incoming[0] && incoming[0].id) || null);
-          setGlobalSettings(prev => ({ ...prev, ...(data.globalSettings || {}) }));
-          setShareCode(code);
-        }
-      } catch (e) {
-        console.warn('No se pudo restaurar la sesión Firebase guardada:', e);
-      }
-    })();
-  }, []);
-
-    // Guardar con debounce en localStorage + indicador
+  // Guardar con debounce en localStorage + indicador
 	React.useEffect(() => {
     setIsSaving(true);
     const handler = setTimeout(() => {
@@ -1485,7 +1537,7 @@ const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings
         onToggleSettings={() => setSettingsOpen(v => !v)}
         onShareByCode={handleShareByCode}
         onOpenLoadByCode={() => setOpenLoadByCode(true)}
-        shareDisabled={!fbReady}
+        shareDisabled={!fbReady} syncCode={syncCode} onStopSync={stopSync}
       />
 
       {/* Popover de configuración (reemplaza la tarjeta "Cargar Archivo") */}
