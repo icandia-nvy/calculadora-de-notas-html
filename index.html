@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+  <meta id="meta-theme" name="theme-color" content="#ffffff">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="color-scheme" content="light dark">
@@ -34,6 +35,31 @@
   </script>
 
   <style>
+/* --- Theming via data-theme (limpio) --- */
+:root{
+  --bg:#ffffff;
+  --fg:#0f172a;
+  --card:#f8fafc;
+  --border:#e2e8f0;
+  --muted:#64748b;
+  --accent:#2563eb;
+}
+[data-theme="dark"]{
+  --bg:#0b1220;
+  --fg:#e5e7eb;
+  --card:#0f172a;
+  --border:#1f2937;
+  --muted:#94a3b8;
+  --accent:#60a5fa;
+}
+html, body { background: var(--bg); color: var(--fg); }
+header, .card { background: var(--card); border-color: var(--border); }
+input, select, button { color: var(--fg); background: var(--bg); border-color: var(--border); }
+.muted { color: var(--muted); }
+/* Botón flotante de tema */
+
+
+
     body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; color: #1f2937; }
     body.dark { background-color:#0f172a !important; color:#e5e7eb !important; }
     .grade-fail { color: #dc2626; font-weight: bold; }
@@ -159,11 +185,47 @@
     })();
   </script>
 </head>
-<body class="bg-gray-50 dark:bg-gray-900 dark:text-gray-100">
+<body class="bg-gray-50">
 <div id="root"></div>
 <div id="portal-root"></div>
 
 <script type="text/babel" data-presets="env,react">
+// --- Theme manager (data-theme + persistencia + iconos + atajo T) ---
+(function(){
+  const META = document.getElementById('meta-theme');
+  const ROOT = document.documentElement;
+  const LABEL = () => document.getElementById('themeLabel');
+  const BTN = () => document.getElementById('themeToggle');
+  function applyTheme(mode){
+    ROOT.setAttribute('data-theme', mode);
+    try { if (META) META.setAttribute('content', mode === 'dark' ? '#0b1220' : '#ffffff'); } catch {}
+    const text = (mode === 'dark' ? 'Oscuro' : 'Claro');
+    const icon = (mode === 'dark' ? '🌙' : '🌞');
+    if (BTN()) BTN().innerHTML = icon + ' <span id="themeLabel">' + text + '</span>';
+    localStorage.setItem('theme-mode', mode);
+  }
+  function initTheme(){
+    const saved = localStorage.getItem('theme-mode');
+    const preferDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const mode = saved || (preferDark ? 'dark' : 'light');
+    applyTheme(mode);
+  }
+  window.__toggleTheme = function(){
+    const current = ROOT.getAttribute('data-theme') || 'light';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+  };
+  document.addEventListener('DOMContentLoaded', function(){
+    initTheme();
+    const btn = BTN();
+    if (btn) btn.addEventListener('click', window.__toggleTheme);
+    // Atajo de teclado "T"
+    document.addEventListener('keydown', e => {
+      if (e.key && e.key.toLowerCase() === 't') window.__toggleTheme();
+    });
+  });
+})();
+
+
 /* =========================
    CONFIG / UTILIDADES
    ========================= */
@@ -264,19 +326,19 @@ const AddEvalDropdown = React.memo(({ onAdd, onClose }) => {
   };
 
   return (
-    <div ref={dropdownRef} className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-md shadow-lg z-30 p-4 border dark:border-gray-700">
+    <div ref={dropdownRef} className="absolute top-full right-0 mt-2 w-64 bg-white rounded-md shadow-lg z-30 p-4 border">
       <div className="space-y-3">
         <div>
           <label className="block text-sm font-medium text-gray-700">Nombre</label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"/>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">Puntaje Máximo</label>
-          <input type="text" value={maxScore} onChange={e => { const n = normalizeNumberInput(e.target.value); if (n !== null) setMaxScore(n); }} className="mt-1 block w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"/>
+          <input type="text" value={maxScore} onChange={e => { const n = normalizeNumberInput(e.target.value); if (n !== null) setMaxScore(n); }} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">Exigencia (%)</label>
-          <input type="text" value={exigency} onChange={e => { const n = normalizeNumberInput(e.target.value); if (n !== null) setExigency(n); }} className="mt-1 block w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"/>
+          <input type="text" value={exigency} onChange={e => { const n = normalizeNumberInput(e.target.value); if (n !== null) setExigency(n); }} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
         </div>
         <div className="flex justify-end">
           <button onClick={handleSubmit} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Añadir</button>
@@ -313,11 +375,11 @@ const DiffScoreDropdown = ({ evaluation, onSave, onClose }) => {
   };
 
   const dropdownContent = (
-    <div ref={dropdownRef} className="absolute bg-white dark:bg-gray-800 dark:text-gray-100 rounded-md shadow-lg z-[9999] p-4 border dark:border-gray-700 w-64" style={{ top: `${position.top}px`, left: `${position.left}px` }}>
+    <div ref={dropdownRef} className="absolute bg-white rounded-md shadow-lg z-[9999] p-4 border w-64" style={{ top: `${position.top}px`, left: `${position.left}px` }}>
       <div className="space-y-3">
         <div className="flex items-center">
           <input type="checkbox" checked={evalData.differentiatedScores.enabled} onChange={handleToggle} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-          <label className="ml-2 block text-sm text-gray-900 dark:text-gray-100">Habilitar diferenciados</label>
+          <label className="ml-2 block text-sm text-gray-900">Habilitar diferenciados</label>
         </div>
         {evalData.differentiatedScores.enabled && (
           <div className="space-y-2">
@@ -343,6 +405,8 @@ const ImportConfirmationModal = ({ pending, existingSheets, onConfirmReplace, on
   const modalRef = React.useRef(null);
   React.useEffect(() => {
     const handleClickOutside = (event) => { if (modalRef.current && !modalRef.current.contains(event.target)) onCancel(); };
+
+
     const onEsc = (e) => { if (e.key === 'Escape') onCancel(); };
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", onEsc);
@@ -375,7 +439,7 @@ const ImportConfirmationModal = ({ pending, existingSheets, onConfirmReplace, on
 
   const modalContent = (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
-      <div ref={modalRef} className="bg-white dark:bg-gray-800 dark:text-gray-100 p-5 rounded-lg shadow-xl w-[min(1000px,95vw)] max-h-[85vh] flex flex-col">
+      <div ref={modalRef} className="bg-white p-5 rounded-lg shadow-xl w-[min(1000px,95vw)] max-h-[85vh] flex flex-col">
         <h3 className="text-lg font-bold mb-1">Importar hojas desde Excel</h3>
         <p className="text-sm text-gray-600 mb-3">
           Se detectaron <strong>{summary.totals.sheets}</strong> hoja(s), <strong>{summary.totals.students}</strong> alumno(s) totales y <strong>{summary.totals.evaluations}</strong> evaluación(es) en total.
@@ -420,7 +484,7 @@ const ImportConfirmationModal = ({ pending, existingSheets, onConfirmReplace, on
         )}
 
         <div className="flex justify-end gap-2 mt-4">
-          <button onClick={onCancel} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600">Cancelar</button>
+          <button onClick={onCancel} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">Cancelar</button>
           <button onClick={onConfirmAdd} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Añadir a las existentes</button>
           <button onClick={onConfirmReplace} className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Reemplazar todo</button>
         </div>
@@ -429,6 +493,51 @@ const ImportConfirmationModal = ({ pending, existingSheets, onConfirmReplace, on
   );
   return ReactDOM.createPortal(modalContent, document.getElementById('portal-root'));
 };
+
+/* --- Editor de Offset (ajuste de nota por celda) --- */
+const OffsetModal = ({ open, onClose, onApply, studentName, evalName, value }) => {
+  const [txt, setTxt] = React.useState(value ?? '');
+  React.useEffect(() => { setTxt(value ?? ''); }, [value, open]);
+  const parse = (s) => {
+    if (s === '' || s === null || s === undefined) return '';
+    const v = String(s).replace(',', '.');
+    return /^\-?\d*\.?\d*$/.test(v) ? v : '';
+  };
+  const step = (d) => {
+    const n = parseFloat((txt || '0').replace(',', '.'));
+    const next = (isNaN(n) ? 0 : n) + d;
+    const rounded = Math.round(next * 10) / 10;
+    setTxt(String(rounded).replace('.', ','));
+  };
+  if (!open) return null;
+  return ReactDOM.createPortal(
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]" onClick={(e)=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div className="bg-white p-5 rounded-lg shadow-xl w-[min(420px,95vw)]">
+        <h3 className="text-lg font-semibold mb-2">Ajuste de nota</h3>
+        <p className="text-sm text-gray-600 mb-3">Se sumará a la nota calculada para esta celda (ej: 0,3 o -0,2).</p>
+        <div className="text-xs text-gray-500 mb-3"><b>Alumno:</b> {studentName || '—'} · <b>Evaluación:</b> {evalName || '—'}</div>
+        <div className="flex items-center gap-2">
+          <input value={txt} onChange={e => setTxt(parse(e.target.value))} inputMode="decimal"
+                 className="border rounded px-2 py-2 w-full font-mono text-lg" placeholder="0,0" />
+          <div className="flex flex-col gap-2">
+            <button onClick={()=>step(-0.1)} className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300">−0,1</button>
+            <button onClick={()=>step(+0.1)} className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300">+0,1</button>
+          </div>
+        </div>
+        <div className="flex justify-between mt-4">
+          <button onClick={()=>onApply('')} className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300">Quitar offset</button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300">Cancelar</button>
+            <button onClick={()=>onApply(txt)} className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700">Aplicar</button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.getElementById('portal-root')
+  );
+};
+
+
 
 
 /* --- Nuevo: Popover de Configuración --- */
@@ -460,10 +569,10 @@ const SettingsPopover = ({ anchorId, open, onClose, children }) => {
   if (!open) return null;
 
   const content = (
-    <div ref={popRef} className="absolute z-[10001] bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg shadow-xl w-[320px] p-4"
+    <div ref={popRef} className="absolute z-[10001] bg-white border rounded-lg shadow-xl w-[320px] p-4"
          style={{ top: pos.top, left: pos.left }} role="dialog" aria-modal="true">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Configuración de Escala de Notas</h3>
+        <h3 className="text-sm font-semibold text-gray-700">Configuración de Escala de Notas</h3>
         <button onClick={onClose} aria-label="Cerrar" className="text-gray-500 hover:text-red-600">&times;</button>
       </div>
       {children}
@@ -518,11 +627,11 @@ const Header = React.memo(({
   };
 
   return (
-    <header className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b-2 border-gray-200 dark:border-gray-700">
+    <header className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b-2 border-gray-200">
       <div className="flex items-center gap-2">
-        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 dark:text-gray-100">Calculadora de Notas</h1>
+        <h1 className="text-3xl font-bold text-gray-800">Calculadora de Notas</h1>
         <button id="settings-btn" onClick={onToggleSettings}
-                className="ml-1 px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-md flex items-center gap-1"
+                className="ml-1 px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 rounded-md flex items-center gap-1"
                 aria-haspopup="dialog" aria-expanded="false">
           <span>Configuración</span> <span>⚙️</span>
         </button>
@@ -532,24 +641,24 @@ const Header = React.memo(({
       </div>
       <div className="flex items-center space-x-2 mt-4 sm:mt-0">
         <div className="relative">
-          <button aria-label="Añadir nueva evaluación" onClick={() => setAddEvalDropdownOpen(prev => !prev)} disabled={!activeSheet} className="px-4 py-2 bg-green-500 dark:bg-green-600 text-white rounded-md shadow-sm hover:bg-green-600 dark:hover:bg-green-500 disabled:bg-gray-300 dark:disabled:bg-gray-600 dark:disabled:text-gray-400">Añadir Evaluación</button>
+          <button aria-label="Añadir nueva evaluación" onClick={() => setAddEvalDropdownOpen(prev => !prev)} disabled={!activeSheet} className="px-4 py-2 bg-green-500 text-white rounded-md shadow-sm hover:bg-green-600 disabled:bg-gray-300">Añadir Evaluación</button>
           {isAddEvalDropdownOpen && <AddEvalDropdown onAdd={onAddEvaluation} onClose={() => setAddEvalDropdownOpen(false)} />}
         </div>
-        <button aria-label="Añadir nuevo alumno" onClick={onAddStudent} disabled={!activeSheet} className="px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-600 dark:hover:bg-blue-500 disabled:bg-gray-300 dark:disabled:bg-gray-600 dark:disabled:text-gray-400">Añadir Alumno</button>
+        <button aria-label="Añadir nuevo alumno" onClick={onAddStudent} disabled={!activeSheet} className="px-4 py-2 bg-blue-500 text-white rounded-md shadow-sm hover:bg-blue-600 disabled:bg-gray-300">Añadir Alumno</button>
         
         {/* Import dropdown */}
         <div ref={importRef} className="relative inline-block">
           <button onClick={() => setImportOpen(v => !v)}
-                  className="px-4 py-2 bg-gray-700 dark:bg-gray-700 text-white rounded-md shadow-sm hover:bg-gray-800 dark:hover:bg-gray-600">
+                  className="px-4 py-2 bg-gray-700 text-white rounded-md shadow-sm hover:bg-gray-800">
             Importar ▾
           </button>
           {importOpen && (
-            <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 dark:text-gray-100 border dark:border-gray-700 rounded shadow z-30">
-              <button className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700"
+            <div className="absolute right-0 mt-2 w-56 bg-white border rounded shadow z-30">
+              <button className="w-full text-left px-3 py-2 hover:bg-gray-50"
                       onClick={() => { setImportOpen(false); window.loadXLSX().finally(() => { fileInputRef.current && fileInputRef.current.click(); }); }}>
                 Desde Excel (.xlsx)
               </button>
-              <button className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700"
+              <button className="w-full text-left px-3 py-2 hover:bg-gray-50"
                       onClick={() => { setImportOpen(false); onOpenLoadByCode(); }}>
                 Desde código (Firebase)
               </button>
@@ -562,12 +671,12 @@ const Header = React.memo(({
         <div ref={menuRef} className="relative inline-block">
           <button onClick={() => setMenuOpen(v => !v)}
                   disabled={sheetsCount === 0 && shareDisabled}
-                  className="px-4 py-2 bg-orange-500 dark:bg-orange-600 text-white rounded-md shadow-sm hover:bg-orange-600 dark:hover:bg-orange-500 disabled:bg-gray-300 dark:disabled:bg-gray-600 dark:disabled:text-gray-400">
+                  className="px-4 py-2 bg-orange-500 text-white rounded-md shadow-sm hover:bg-orange-600 disabled:bg-gray-300">
             Exportar / Compartir ▾
           </button>
           {menuOpen && (
-            <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 dark:text-gray-100 border dark:border-gray-700 rounded shadow z-30">
-              <button className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700"
+            <div className="absolute right-0 mt-2 w-64 bg-white border rounded shadow z-30">
+              <button className="w-full text-left px-3 py-2 hover:bg-gray-50"
                       onClick={() => { setMenuOpen(false); onExport(); }}>
                 Exportar a Excel (.xlsx)
               </button>
@@ -580,7 +689,7 @@ const Header = React.memo(({
               {syncCode && (
                 <>
                   <div className="border-t my-1"></div>
-                  <button className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  <button className="w-full text-left px-3 py-2 hover:bg-gray-50"
                           onClick={() => { setMenuOpen(false); onStopSync(); }}>
                     Detener sincronización
                   </button>
@@ -637,7 +746,7 @@ const GlobalSettings = React.memo(({ settings, setSettings }) => {
         </label>
       
       <div className="pt-2 mt-1">
-        <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
           <input
             type="checkbox"
             checked={!!settings.darkMode}
@@ -665,7 +774,7 @@ const Tabs = React.memo(({ sheets, activeSheetId, onSelectTab, onDeleteTab, onRe
   const handleDragEnd = () => { setDraggedIndex(null); setDragOverIndex(null); };
 
   return (
-    <div className="flex border-b border-gray-200 dark:border-gray-700">
+    <div className="flex border-b border-gray-200">
       {sheets.map((s, i) => (
         <div key={s.id}
              className={`tab flex items-center px-4 py-2 border-t border-l border-r rounded-t-lg cursor-pointer -mb-px draggable-tab ${activeSheetId === s.id ? 'active bg-white dark:bg-gray-800 font-semibold' : 'bg-gray-200 dark:bg-gray-700 dark:text-gray-200'} ${dragOverIndex === i ? 'dragging-over-tab' : ''}`}
@@ -685,13 +794,13 @@ const Tabs = React.memo(({ sheets, activeSheetId, onSelectTab, onDeleteTab, onRe
           )}
         </div>
       ))}
-      <button aria-label="Añadir nueva hoja" onClick={onAddTab} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 dark:text-gray-200 rounded-t-lg hover:bg-gray-300 dark:hover:bg-gray-600">+</button>
+      <button aria-label="Añadir nueva hoja" onClick={onAddTab} className="px-4 py-2 bg-gray-200 rounded-t-lg hover:bg-gray-300">+</button>
     </div>
   );
 });
 
 const StudentRow = React.memo(({
-  student,
+  onOpenOffset, student,
   rowIndex,
   evaluations,
   globalSettings,
@@ -708,13 +817,15 @@ const StudentRow = React.memo(({
       if (ev.differentiatedScores.enabled && student.highlight) {
         maxScore = parseFloat(ev.differentiatedScores[student.highlight]) || ev.maxScore;
       }
-      const g = calculateGrade(parseFloat(student.scores[e]), maxScore, ev.exigency, globalSettings);
+      const base = calculateGrade(parseFloat(student.scores[e]), maxScore, ev.exigency, globalSettings);
+      const off = parseFloat(String((student.offsets||[])[e] ?? '').replace(',', '.'));
+      const g = isNaN(base) ? NaN : (isNaN(off) ? base : Math.max(globalSettings.minGrade, Math.min(globalSettings.maxGrade, base + off)));
       if (!isNaN(g)) { total += g; count++; }
       return g;
     });
     const avg = count > 0 ? (total / count) : NaN;
     return { grades, avg };
-  }, [student.scores, student.highlight, evaluations, globalSettings]);
+  }, [student.scores, student.offsets, student.highlight, evaluations, globalSettings]);
 
   return (
     <tr className={`group h-14 ${student.highlight ? `highlight-${student.highlight}` : ''}`}>
@@ -732,7 +843,7 @@ const StudentRow = React.memo(({
               className="w-20 text-center bg-transparent focus:bg-yellow-100 p-2 rounded"
             />
           </td>
-          <td className={`p-1 text-sm text-center font-bold w-20 ${
+          <td title="Doble‑click para ajustar" onDoubleClick={()=>onOpenOffset(rowIndex, e)} className={`p-1 text-sm text-center font-bold w-20 ${
               !isNaN(rowData.grades[e]) && (rowData.grades[e] >= globalSettings.passingGrade ? 'grade-pass' : 'grade-fail')
             } ${!student.highlight && e % 2 !== 0 ? 'bg-gray-50' : ''}`}>
             {isNaN(rowData.grades[e]) ? 'N/A' : rowData.grades[e].toFixed(1)}
@@ -748,6 +859,13 @@ const StudentRow = React.memo(({
 });
   
 const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
+  const ensureOffsetsLength = React.useCallback((arr, len) => {
+    const out = Array.isArray(arr) ? [...arr] : [];
+    while (out.length < len) out.push('');
+    if (out.length > len) out.length = len;
+    return out;
+  }, []);
+
   // === Student list editor (modal) ===
   const [studentListOpen, setStudentListOpen] = React.useState(false);
   const [studentListText, setStudentListText] = React.useState('');
@@ -825,6 +943,17 @@ const [draggedIndex, setDraggedIndex] = React.useState(null);
   }, [globalSettings, sheet.studentData, sheet.evaluations]);
 const inputRefs = React.useRef({});
   const [editingRow, setEditingRow] = React.useState(null);
+  const [offsetOpen, setOffsetOpen] = React.useState(false);
+  const [offsetTarget, setOffsetTarget] = React.useState({ r: null, e: null });
+  const onOpenOffset = (r, e) => { setOffsetTarget({ r, e }); setOffsetOpen(true); };
+  const onApplyOffset = (val) => {
+    const { r, e } = offsetTarget;
+    const d = sheet.studentData.map(s => ({ ...s, offsets: ensureOffsetsLength(s.offsets, sheet.evaluations.length) }));
+    d[r].offsets[e] = (val === '') ? '' : (String(val).replace('.', ','));
+    onUpdateSheet({ ...sheet, studentData: d });
+    setOffsetOpen(false);
+  };
+
 
   const handleSaveDiffScores = React.useCallback((updatedEval) => {
     const updatedEvals = sheet.evaluations.map(ev => ev.id === updatedEval.id ? updatedEval : ev);
@@ -832,6 +961,14 @@ const inputRefs = React.useRef({});
   }, [sheet, onUpdateSheet]);
 
   const update = React.useCallback((data) => onUpdateSheet({ ...sheet, ...data }), [sheet, onUpdateSheet]);
+  React.useEffect(() => {
+    const fixed = sheet.studentData.map(s => ({ ...s, offsets: ensureOffsetsLength(s.offsets, sheet.evaluations.length) }));
+    if (JSON.stringify(fixed.map(s=>s.offsets)) !== JSON.stringify(sheet.studentData.map(s=>s.offsets||[]))) {
+      onUpdateSheet({ ...sheet, studentData: fixed });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheet.evaluations.length]);
+
 
   const handleScoreChange = React.useCallback((r, e, v) => {
   const normalized = normalizeNumberInput(v);
@@ -939,7 +1076,7 @@ const inputRefs = React.useRef({});
     <button
       id="student-list-gear"
       onClick={() => setStudentListOpen(true)}
-      className="ml-2 px-2 py-1 text-sm bg-gray-200 dark:bg-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 rounded shadow-sm"
+      className="ml-2 px-2 py-1 text-sm bg-gray-200 hover:bg-gray-300 rounded shadow-sm"
       title="Editar lista de alumnos (pegar o escribir)"
       aria-label="Editar lista de alumnos"
     >⚙️</button>
@@ -955,7 +1092,7 @@ const inputRefs = React.useRef({});
         <tr key={s.id} className={`group h-14 ${s.highlight ? `highlight-${s.highlight}`:''}`}>
           <td className="p-4 text-sm relative text-center">{r+1}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button aria-label={`Eliminar estudiante ${s.name}`} onClick={()=>delStudent(r)} className="p-1 bg-white dark:bg-gray-800 rounded shadow hover:bg-red-100 dark:hover:bg-gray-700"><span className="text-red-500 font-bold">×</span></button>
+              <button aria-label={`Eliminar estudiante ${s.name}`} onClick={()=>delStudent(r)} className="p-1 bg-white rounded shadow hover:bg-red-100"><span className="text-red-500 font-bold">×</span></button>
             </div>
           </td>
           <td className="p-1 text-sm">
@@ -1006,13 +1143,13 @@ const inputRefs = React.useRef({});
               draggable="true"
               onDragStart={(e) => handleDragStart(e, i)} onDragOver={(e) => handleDragOver(e, i)} onDrop={(e) => handleDrop(e, i)} onDragEnd={handleDragEnd} onDragLeave={() => setDragOverIndex(null)}>
             <div className="flex justify-center items-center">
-              <input type="text" value={ev.name} onChange={e => handleEvalNameChange(i, e.target.value)} className="font-bold text-base bg-transparent w-full text-center focus:bg-yellow-100 px-1 rounded dark:text-gray-100"/>
+              <input type="text" value={ev.name} onChange={e => handleEvalNameChange(i, e.target.value)} className="font-bold text-base bg-transparent w-full text-center focus:bg-yellow-100 px-1 rounded"/>
               <div className="relative">
                 <button aria-label={`Configuración para ${ev.name}`} data-dropdown-id={ev.id} onClick={() => setOpenDropdownEvalId(openDropdownEvalId === ev.id ? null : ev.id)} className="ml-2 text-lg text-gray-500 hover:text-blue-600">⚙️</button>
                 {openDropdownEvalId === ev.id && <DiffScoreDropdown evaluation={ev} onSave={handleSaveDiffScores} onClose={() => setOpenDropdownEvalId(null)} />}
               </div>
               <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button aria-label={`Eliminar evaluación ${ev.name}`} onClick={() => delEval(i)} className="p-1 bg-white dark:bg-gray-800 rounded shadow hover:bg-red-100 dark:hover:bg-gray-700"><span className="text-red-500 font-bold">×</span></button>
+                <button aria-label={`Eliminar evaluación ${ev.name}`} onClick={() => delEval(i)} className="p-1 bg-white rounded shadow hover:bg-red-100"><span className="text-red-500 font-bold">×</span></button>
               </div>
             </div>
           </th>
@@ -1024,9 +1161,9 @@ const inputRefs = React.useRef({});
           <th key={ev.id} colSpan="2" className={`p-1 ${i % 2 !== 0 ? 'bg-gray-100' : ''}`}>
             <div className="flex justify-center items-center space-x-2">
               <label className="text-xs">P.Máx:</label>
-              <input type="text" value={ev.maxScore} onChange={e => handleEvalHeaderChange(i, 'maxScore', e.target.value)} className="w-16 p-1 text-xs border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100" />
+              <input type="text" value={ev.maxScore} onChange={e => handleEvalHeaderChange(i, 'maxScore', e.target.value)} className="w-16 p-1 text-xs border rounded" />
               <label className="text-xs">Exig:</label>
-              <input type="text" value={ev.exigency} onChange={e => handleEvalHeaderChange(i, 'exigency', e.target.value)} className="w-16 p-1 text-xs border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"/>
+              <input type="text" value={ev.exigency} onChange={e => handleEvalHeaderChange(i, 'exigency', e.target.value)} className="w-16 p-1 text-xs border rounded"/>
             </div>
           </th>)}
       </tr>
@@ -1039,7 +1176,7 @@ const inputRefs = React.useRef({});
       </thead>
       <tbody className="bg-white divide-y divide-gray-200">
       {sheet.studentData.map((s, r) => (
-        <StudentRow key={s.id} student={s} rowIndex={r} evaluations={sheet.evaluations}
+        <StudentRow key={s.id} student={s} rowIndex={r} evaluations={sheet.evaluations} onOpenOffset={onOpenOffset}
             globalSettings={globalSettings} handleScoreChange={handleScoreChange}
             handleScoreBlur={handleScoreBlur} handleKeyDown={handleKeyDown}
             inputRefs={inputRefs} setEditingRow={setEditingRow}/>
@@ -1069,7 +1206,7 @@ const inputRefs = React.useRef({});
     </table>, gradesRoot) : null;
 
   return (
-    <div className="bg-white dark:bg-gray-800 dark:text-gray-100 p-2 sm:p-4 rounded-b-lg shadow-md flex relative" ref={setTableContainer}>
+    <div className="bg-white p-2 sm:p-4 rounded-b-lg shadow-md flex relative" ref={setTableContainer}>
       <div ref={setStudentRoot} className="relative flex-shrink-0"></div>
       <div ref={setGradesRoot} className="overflow-x-auto flex-grow"></div>
       {StudentColumnPortal}
@@ -1088,7 +1225,7 @@ const inputRefs = React.useRef({});
       
       {studentListOpen && ReactDOM.createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
-          <div className="bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg shadow-xl w-[min(900px,95vw)] max-h-[85vh] p-5 flex flex-col">
+          <div className="bg-white rounded-lg shadow-xl w-[min(900px,95vw)] max-h-[85vh] p-5 flex flex-col">
             <h3 className="text-lg font-semibold mb-2">Lista de alumnos</h3>
             <p className="text-sm text-gray-600 mb-3">
               Pega o escribe un alumno por línea (también acepta comas o tabulaciones).
@@ -1103,9 +1240,9 @@ const inputRefs = React.useRef({});
             <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
               <div>Actual: {sheet.studentData.length} alumnos · Evaluaciones: {sheet.evaluations.length}</div>
               <div className="space-x-2">
-                <button onClick={() => setStudentListOpen(false)} className="px-3 py-2 bg-gray-200 dark:bg-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600">Cancelar</button>
-                <button onClick={addToStudentList} className="px-3 py-2 bg-blue-600 dark:bg-blue-600 text-white rounded hover:bg-blue-700 dark:hover:bg-blue-500">Añadir (únicos)</button>
-                <button onClick={replaceStudentList} className="px-3 py-2 bg-red-600 dark:bg-red-600 text-white rounded hover:bg-red-700 dark:hover:bg-red-500">Reemplazar</button>
+                <button onClick={() => setStudentListOpen(false)} className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300">Cancelar</button>
+                <button onClick={addToStudentList} className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Añadir (únicos)</button>
+                <button onClick={replaceStudentList} className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700">Reemplazar</button>
               </div>
             </div>
           </div>
@@ -1116,9 +1253,19 @@ const inputRefs = React.useRef({});
       
 document.getElementById('portal-root')
       )}
+
 {GradesColumnPortal}
+      <OffsetModal
+        open={offsetOpen}
+        onClose={()=>setOffsetOpen(false)}
+        onApply={onApplyOffset}
+        studentName={sheet.studentData[offsetTarget.r]?.name}
+        evalName={sheet.evaluations[offsetTarget.e]?.name}
+        value={sheet.studentData[offsetTarget.r]?.offsets?.[offsetTarget.e] ?? ''}
+      />
     </div>
   );
+
 };
 
 /* =========================
@@ -1165,9 +1312,9 @@ const App = () => {
   // Toggle body class for dark mode
   React.useEffect(() => {
     if (globalSettings?.darkMode) {
-      document.body.classList.add('dark');
+      
     } else {
-      document.body.classList.remove('dark');
+      
     }
   }, [globalSettings?.darkMode]);
 const [pendingImport, setPendingImport] = React.useState(null);
@@ -1383,7 +1530,7 @@ const [pendingImport, setPendingImport] = React.useState(null);
     const updatedSheet = {
       ...activeSheet,
       evaluations: [...activeSheet.evaluations, newEvaluation],
-      studentData: activeSheet.studentData.map(s => ({ ...s, scores: [...s.scores, ''] }))
+      studentData: activeSheet.studentData.map(s => ({ ...s, scores: [...s.scores, ''], offsets: Array.isArray(s.offsets) ? [...s.offsets, ''] : [...Array(activeSheet.evaluations.length).fill(''), ''] }))
     };
     handleUpdateSheet(updatedSheet);
   }, [activeSheet, handleUpdateSheet]);
@@ -1394,6 +1541,7 @@ const [pendingImport, setPendingImport] = React.useState(null);
       id: generateId(),
       name: `Estudiante ${activeSheet.studentData.length + 1}`,
       scores: Array(activeSheet.evaluations.length).fill(''),
+      offsets: Array(activeSheet.evaluations.length).fill(''),
       highlight: null
     };
     handleUpdateSheet({ ...activeSheet, studentData: [...activeSheet.studentData, newStudent] });
@@ -1482,7 +1630,7 @@ const [pendingImport, setPendingImport] = React.useState(null);
           }
           const numericScore = parseFloat(student.scores[i]);
 const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings);
-          row.push(student.scores[i] ?? '', isNaN(grade) ? '' : grade.toFixed(1));
+          row.push(student.scores[i] ?? '', isNaN(grade) ? '' : grade.toFixed(1), (student.offsets||[])[i] ?? '');
           if (!isNaN(grade)) { total += grade; count++; }
         });
         const avg = count > 0 ? (total / count) : NaN;
@@ -1491,11 +1639,11 @@ const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings
         return row;
       });
       const aoa = [
-        ['', '', ...sheet.evaluations.flatMap(ev => [ev.name, ''])],
-        ['', 'P. Máx:', ...sheet.evaluations.flatMap(ev => [ev.maxScore, ''])],
-        ['', 'Exig:', ...sheet.evaluations.flatMap(ev => [ev.exigency, ''])],
-        ['', 'Diferenciados', ...sheet.evaluations.flatMap(ev => [ev.differentiatedScores.enabled ? 'SI' : 'NO', `${ev.differentiatedScores.green},${ev.differentiatedScores.yellow},${ev.differentiatedScores.blue}`])],
-        ['#', sheet.studentHeader, ...sheet.evaluations.flatMap(() => ['Puntaje', 'Nota']), 'Promedio Final', 'Highlight'],
+        ['', '', ...sheet.evaluations.flatMap(ev => [ev.name, '', ''])],
+        ['', 'P. Máx:', ...sheet.evaluations.flatMap(ev => [ev.maxScore, '', ''])],
+        ['', 'Exig:', ...sheet.evaluations.flatMap(ev => [ev.exigency, '', ''])],
+        ['', 'Diferenciados', ...sheet.evaluations.flatMap(ev => [ev.differentiatedScores.enabled ? 'SI' : 'NO', `${ev.differentiatedScores.green},${ev.differentiatedScores.yellow},${ev.differentiatedScores.blue}`, ''])],
+        ['#', sheet.studentHeader, ...sheet.evaluations.flatMap(() => ['Puntaje', 'Nota', 'Offset']), 'Promedio Final', 'Highlight'],
         ...processedData
       ];
       const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -1517,7 +1665,7 @@ const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings
 
   return (
     <>
-      <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
+      <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-screen">
       {pendingImport && (
         <ImportConfirmationModal pending={pendingImport} existingSheets={sheets}
           onConfirmReplace={handleConfirmReplace}
@@ -1559,7 +1707,7 @@ const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings
           <GradesTable key={activeSheetId} sheet={activeSheet} onUpdateSheet={handleUpdateSheet} globalSettings={globalSettings} />
         </div>
       ) : (
-        <div className="text-center bg-white dark:bg-gray-800 dark:text-gray-100 p-10 rounded-lg shadow-md">
+        <div className="text-center bg-white p-10 rounded-lg shadow-md">
           <h2 className="text-2xl font-bold text-gray-700 mb-4">Comienza a Calcular Notas</h2>
           <p className="text-gray-500 mb-6">Puedes importar un archivo de Excel o crear una tabla manualmente.</p>
           <button onClick={handleCreateSheet} className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700">
@@ -1571,15 +1719,15 @@ const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings
       {/* Modal: Abrir por código */}
       {openLoadByCode && ReactDOM.createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
-          <div className="bg-white dark:bg-gray-800 dark:text-gray-100 p-5 rounded-lg shadow-xl w-[min(420px,95vw)]">
+          <div className="bg-white p-5 rounded-lg shadow-xl w-[min(420px,95vw)]">
             <h3 className="text-lg font-semibold mb-2">Abrir por código</h3>
             <p className="text-sm text-gray-600 mb-3">Ingresa el código compartido para añadir o reemplazar las hojas actuales:</p>
             <input value={codeInput} onChange={e => setCodeInput(e.target.value.toUpperCase())}
-                   className="border rounded px-2 py-2 w-full font-mono mb-4 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100" placeholder="CÓDIGO" />
+                   className="border rounded px-2 py-2 w-full font-mono mb-4" placeholder="CÓDIGO" />
             <div className="flex justify-end gap-2">
-              <button className="px-3 py-2 bg-gray-200 dark:bg-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600" onClick={() => setOpenLoadByCode(false)}>Cancelar</button>
-              <button onClick={handleLoadByCodeAdd} className="px-3 py-2 bg-blue-600 dark:bg-blue-600 text-white rounded hover:bg-blue-700 dark:hover:bg-blue-500">Añadir</button>
-              <button onClick={handleLoadByCodeReplace} className="px-3 py-2 bg-red-600 dark:bg-red-600 text-white rounded hover:bg-red-700 dark:hover:bg-red-500">Reemplazar</button>
+              <button className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300" onClick={() => setOpenLoadByCode(false)}>Cancelar</button>
+              <button onClick={handleLoadByCodeAdd} className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Añadir</button>
+              <button onClick={handleLoadByCodeReplace} className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700">Reemplazar</button>
             </div>
           </div>
         </div>,
@@ -1588,16 +1736,16 @@ const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings
     {/* Modal: Código generado */}
       {shareOpen && ReactDOM.createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
-                    <div className="bg-white dark:bg-gray-800 dark:text-gray-100 p-5 rounded-lg shadow-xl w-[min(420px,95vw)]">
+                    <div className="bg-white p-5 rounded-lg shadow-xl w-[min(420px,95vw)]">
             <h3 className="text-lg font-semibold mb-2">Código de tabla</h3>
             <p className="text-sm text-gray-600 mb-3">Comparte este código para abrir esta tabla en otro dispositivo:</p>
             <div className="flex items-center gap-2 mb-4">
               <input className="border rounded px-2 py-1 w-full text-center font-mono text-lg" readOnly value={shareCode} />
-              <button className="px-3 py-2 bg-gray-200 dark:bg-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
+              <button className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300"
                 onClick={() => { navigator.clipboard?.writeText(shareCode); }}>Copiar</button>
             </div>
             <div className="flex justify-end">
-              <button className="px-3 py-2 bg-gray-200 dark:bg-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600" onClick={() => setShareOpen(false)}>Cerrar</button>
+              <button className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300" onClick={() => setShareOpen(false)}>Cerrar</button>
             </div>
           </div>
         </div>,
@@ -1620,18 +1768,9 @@ if (rootElement) {
 </script>
 <script>
 // Keep browser UI (address bar) in sync with our theme, and avoid UA auto dark.
-(function syncThemeColor(){
-  function apply() {
-    const dark = document.body.classList.contains('dark');
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', dark ? '#0f172a' : '#f3f4f6');
-    // On light theme, mark root as light to opt out of any UA darkening flags.
-    document.documentElement.classList.toggle('dark', false); // we use body.dark only
-  }
-  const mo = new MutationObserver(apply);
+(const mo = new MutationObserver(apply);
   mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
   apply();
 })();
-</script>
-</body>
+</script></body>
 </html>
