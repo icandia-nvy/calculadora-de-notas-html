@@ -1280,467 +1280,281 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
 /* =========================
    APP PRINCIPAL
    ========================= */
-const App = () => {
-  const [, __fbTick] = React.useState(0);
-  React.useEffect(() => {
-    const handler = () => __fbTick(x => x + 1);
-    document.addEventListener('firebase-ready', handler);
-    return () => document.removeEventListener('firebase-ready', handler);
-  }, []);
-  
-  const defaultState = {
-    sheets: [],
-    activeSheetId: null,
-    globalSettings: { minGrade: 1.0, passingGrade: 4.0, maxGrade: 7.0, showAdvanced: false, darkMode: false },
-    firebaseCode: ''
-  };
-  
-  const getInitialState = () => {
-    const loaded = loadStateFromLocalStorage();
-    if (loaded) {
-      const sheetsWithWidth = (loaded.sheets || []).map(sheet => ({ ...sheet, studentColumnWidth: sheet.studentColumnWidth || 200 }));
-      return { ...defaultState, ...loaded, sheets: sheetsWithWidth, globalSettings: { ...defaultState.globalSettings, ...(loaded.globalSettings || {}) } };
+const parseSheetToModel = (sheetName, sheet, XLSX) => {
+  const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  if (!json || json.length < 5) return null;
+
+  const headerRow = json[4];
+  let studentCol = headerRow.findIndex(c => c && String(c).match(/alumnos|nombres|estudiantes|student/i));
+  if (studentCol === -1) studentCol = 1;
+
+  const evaluations = [];
+
+  for (let i = studentCol + 1; i < json[0].length; i++) {
+    const nameEv = json[0][i];
+    const maxVal = json[1][i];
+    if (!nameEv || !maxVal) continue;
+
+    const maxScore = parseFloat(maxVal);
+    const exigency = parseFloat(json[2][i]);
+    if (isNaN(maxScore) || isNaN(exigency)) continue;
+
+    let limit = json[0].length;
+    for (let k = i + 1; k < json[0].length; k++) {
+      if (json[0][k] && json[1][k]) { limit = k; break; }
     }
-    return defaultState;
+
+    let scoreIdx = i;
+    let offsetIdx = -1;
+    for (let c = i; c < limit; c++) {
+      const h = String(headerRow[c] || '').toLowerCase();
+      if (h === 'puntaje') scoreIdx = c;
+      if (h === 'offset') offsetIdx = c;
+    }
+
+    const diff = String(json[3][i + 1] || '').split(',');
+
+    evaluations.push({
+      id: generateId(),
+      name: String(nameEv),
+      maxScore,
+      exigency,
+      differentiatedScores: {
+        enabled: json[3][i] === 'SI',
+        green: parseFloat(diff[0]) || maxScore,
+        yellow: parseFloat(diff[1]) || maxScore,
+        blue: parseFloat(diff[2]) || maxScore
+      },
+      _idx: { scoreIdx, offsetIdx }
+    });
+  }
+
+  if (!evaluations.length) return null;
+
+  const studentData = json.slice(5).map(r => {
+    if (!r[studentCol]) return null;
+    return {
+      id: generateId(),
+      name: String(r[studentCol]),
+      scores: evaluations.map(ev => r[ev._idx.scoreIdx] ?? ''),
+      offsets: evaluations.map(ev => ev._idx.offsetIdx !== -1 ? r[ev._idx.offsetIdx] ?? '' : ''),
+      highlight: null
+    };
+  }).filter(Boolean);
+
+  evaluations.forEach(ev => delete ev._idx);
+
+  return {
+    id: generateId(),
+    name: sheetName,
+    studentHeader: headerRow[studentCol] || 'Alumnos',
+    evaluations,
+    studentData,
+    studentColumnWidth: 200
   };
-  
-  const initial = getInitialState();
+};
+
+const defaultState = {
+  sheets: [],
+  activeSheetId: null,
+  globalSettings: { minGrade: 1.0, passingGrade: 4.0, maxGrade: 7.0, showAdvanced: false, darkMode: false }
+};
+
+const getInitialState = () => {
+  const loaded = loadStateFromLocalStorage();
+  if (!loaded) return defaultState;
+  const sheetsWithWidth = (loaded.sheets || []).map(s => ({ ...s, studentColumnWidth: s.studentColumnWidth || 200 }));
+  return {
+    ...defaultState,
+    ...loaded,
+    sheets: sheetsWithWidth,
+    globalSettings: { ...defaultState.globalSettings, ...(loaded.globalSettings || {}) }
+  };
+};
+
+const App = () => {
+  const initial = React.useMemo(() => getInitialState(), []);
+
   const [sheets, setSheets] = React.useState(initial.sheets);
   const [activeSheetId, setActiveSheetId] = React.useState(initial.activeSheetId);
   const [globalSettings, setGlobalSettings] = React.useState(initial.globalSettings);
-  
-  React.useEffect(() => {
-    if (initial.firebaseCode) {
-      startSync(initial.firebaseCode);
-      setShareCode(initial.firebaseCode);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    if (globalSettings?.darkMode) {
-      // Dark mode logic if needed
-    } else {
-      // Light mode logic if needed
-    }
-  }, [globalSettings?.darkMode]);
-
   const [pendingImport, setPendingImport] = React.useState(null);
   const [isSaving, setIsSaving] = React.useState(false);
   const [lastSaved, setLastSaved] = React.useState(null);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
 
-  const [fbReady, setFbReady] = React.useState(!!(window.__FB_DB__ && (window.__FB_UID__ || (window.firebase && firebase.auth && firebase.auth().currentUser))));
-  React.useEffect(() => {
-    const compute = () => setFbReady(!!(window.__FB_DB__ && (window.__FB_UID__ || (window.firebase && firebase.auth && firebase.auth().currentUser))));
-    compute();
-    const onReady = () => compute();
-    document.addEventListener('firebase-ready', onReady);
-    let unsub = null;
-    try {
-      if (window.firebase && firebase.auth) {
-        const auth = firebase.auth();
-        unsub = auth.onAuthStateChanged(u => { window.__FB_UID__ = u ? u.uid : null; compute(); });
-      }
-    } catch(e){}
-    const timer = setInterval(compute, 1500);
-    return () => {
-      document.removeEventListener('firebase-ready', onReady);
-      if (unsub) unsub();
-      clearInterval(timer);
-    };
-  }, []);
-
-  const [shareOpen, setShareOpen] = React.useState(false);
-  const [shareCode, setShareCode] = React.useState(initial.firebaseCode || '');
-  const [openLoadByCode, setOpenLoadByCode] = React.useState(false);
-  const [codeInput, setCodeInput] = React.useState('');
-  const [syncCode, setSyncCode] = React.useState('');
-  const syncUnsubRef = React.useRef(null);
-  const applyingRemoteRef = React.useRef(false);
-  const pendingUploadRef = React.useRef(null);
-
-  const startSync = React.useCallback((code) => {
-    if (!code || !window.__FB_DB__) return;
-    if (syncUnsubRef.current) { syncUnsubRef.current(); syncUnsubRef.current = null; }
-    setSyncCode(code);
-    const docRef = window.__FB_DB__.collection('gradeSheets').doc(code);
-    syncUnsubRef.current = docRef.onSnapshot((snap) => {
-      if (!snap.exists) return;
-      const data = snap.data() || {};
-      applyingRemoteRef.current = true;
-      try {
-        const incoming = Array.isArray(data.sheets) ? data.sheets : [];
-        if (incoming.length) setSheets(incoming);
-        if (data.activeSheetId) setActiveSheetId(data.activeSheetId);
-        if (data.globalSettings) setGlobalSettings(prev => ({ ...prev, ...data.globalSettings }));
-      } finally {
-        setTimeout(() => { applyingRemoteRef.current = false; }, 0);
-      }
-    });
-  }, [setSheets, setActiveSheetId, setGlobalSettings]);
-
-  const stopSync = React.useCallback(() => {
-    if (syncUnsubRef.current) { syncUnsubRef.current(); syncUnsubRef.current = null; }
-    setSyncCode('');
-    setShareCode('');
-    const st = loadStateFromLocalStorage() || {};
-    saveStateToLocalStorage({ ...st, sheets, activeSheetId, globalSettings, firebaseCode: '' });
-  }, [sheets, activeSheetId, globalSettings]);
-
-  React.useEffect(() => {
-    if (!syncCode || !window.__FB_DB__) return;
-    if (applyingRemoteRef.current) return;
-    const docRef = window.__FB_DB__.collection('gradeSheets').doc(syncCode);
-    if (pendingUploadRef.current) clearTimeout(pendingUploadRef.current);
-    pendingUploadRef.current = setTimeout(() => {
-      docRef.set({ sheets, activeSheetId, globalSettings, updatedAt: Date.now(), v: 2 }, { merge: true })
-        .catch(e => console.warn('Sync upload error', e));
-    }, 600);
-    return () => { if (pendingUploadRef.current) clearTimeout(pendingUploadRef.current); };
-  }, [sheets, activeSheetId, globalSettings, syncCode]);
-
-  function generateShareCode(len = 7) {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let out = '';
-    for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
-    return out;
-  }
-
-  const handleShareByCode = async () => {
-    try {
-      if (!window.__FB_DB__ || !window.firebase || !firebase.auth) {
-        alert('Firebase no está configurado.');
-        return;
-      }
-      const auth = firebase.auth();
-      let user = auth.currentUser;
-      if (!user) {
-        try { await auth.signInAnonymously(); } catch (e) { console.error('Auth anónima falló:', e); alert('No fue posible autenticar.'); return; }
-        user = await new Promise((resolve, reject) => {
-          const unsub = auth.onAuthStateChanged(u => { unsub(); u ? resolve(u) : reject(new Error('Sin usuario')); });
-        });
-      }
-      window.__FB_UID__ = user.uid;
-      const code = generateShareCode();
-      const payload = { sheets, activeSheetId, globalSettings, v: 1, createdAt: Date.now(), owner: window.__FB_UID__ };
-      await window.__FB_DB__.collection('gradeSheets').doc(code).set(payload);
-      setShareCode(code);
-      setShareOpen(true);
-      startSync(code);
-      saveStateToLocalStorage({ sheets, activeSheetId, globalSettings, firebaseCode: code });
-    } catch (e) {
-      console.error('Error al compartir por código', e);
-      alert('No se pudo generar el código. Revisa la consola.');
-    }
-  };
-
-  const loadByCode = async (replace) => {
-    if (!window.__FIREBASE_OK__ || !window.__FB_DB__) {
-      alert('Firebase no está configurado.');
-      return;
-    }
-    try {
-      const code = (codeInput || '').trim().toUpperCase();
-      if (!code) { alert('Ingresa un código.'); return; }
-      const snap = await window.__FB_DB__.collection('gradeSheets').doc(code).get();
-      if (!snap.exists) { alert('Código no encontrado'); return; }
-      const data = snap.data() || {};
-      const incoming = Array.isArray(data.sheets) ? data.sheets : [];
-      if (replace) {
-        setSheets(incoming);
-        setActiveSheetId(data.activeSheetId || (incoming[0] && incoming[0].id) || null);
-      } else {
-        const mapped = incoming.map(sh => ({
-          ...sh,
-          id: sh.id || ('imp_' + Math.random().toString(36).slice(2,8)),
-          studentData: (sh.studentData || []).map(st => ({ ...st, id: st.id || ('st_' + Math.random().toString(36).slice(2,8)) }))
-        }));
-        setSheets(prev => [...prev, ...mapped]);
-        if (!activeSheetId && mapped[0]) setActiveSheetId(mapped[0].id);
-      }
-      setGlobalSettings(prev => ({ ...prev, ...(data.globalSettings || {}) }));
-      setOpenLoadByCode(false);
-      setCodeInput('');
-      setShareCode(code);
-      startSync(code);
-      saveStateToLocalStorage({ sheets, activeSheetId, globalSettings, firebaseCode: code });
-    } catch (e) {
-      console.error('Error al cargar por código', e);
-      alert('No se pudo cargar por código. Revisa la consola.');
-    }
-  };
-  const handleLoadByCodeAdd = () => loadByCode(false);
-  const handleLoadByCodeReplace = () => loadByCode(true);
+  const undoStackRef = React.useRef([]);
+  const redoStackRef = React.useRef([]);
 
   React.useEffect(() => {
     setIsSaving(true);
-    const handler = setTimeout(() => {
-      saveStateToLocalStorage({ sheets, activeSheetId, globalSettings, firebaseCode: shareCode });
+    const t = setTimeout(() => {
+      saveStateToLocalStorage({ sheets, activeSheetId, globalSettings });
       setIsSaving(false);
       setLastSaved(new Date());
     }, 500);
-    return () => clearTimeout(handler);
-  }, [sheets, activeSheetId, globalSettings, shareCode]);
+    return () => clearTimeout(t);
+  }, [sheets, activeSheetId, globalSettings]);
 
-  const handleUpdateSheet = React.useCallback(u => setSheets(p => p.map(s => s.id === u.id ? u : s)), []);
-  const handleCreateSheet = React.useCallback(() => {
-    const name = 'Hoja ' + (sheets.length + 1);
-    const newSheet = { id: generateId(), name, studentHeader: 'Alumnos', evaluations: [], studentData: [], studentColumnWidth: 200 };
-    setSheets(p => [...p, newSheet]);
-    setActiveSheetId(newSheet.id);
-  }, [sheets.length]);
-  const handleDeleteSheet = React.useCallback(id => {
-    setSheets(p => {
-      const n = p.filter(s => s.id !== id);
-      if (activeSheetId === id) setActiveSheetId(n[0]?.id || null);
-      return n;
+  const activeSheet = React.useMemo(
+    () => sheets.find(s => s.id === activeSheetId) || null,
+    [sheets, activeSheetId]
+  );
+
+  const pushHistory = () => {
+    undoStackRef.current.push({
+      sheets: JSON.parse(JSON.stringify(sheets)),
+      activeSheetId,
+      globalSettings
     });
-  }, [activeSheetId]);
-  const handleRenameSheet = React.useCallback((id, name) => setSheets(p => p.map(s => s.id === id ? { ...s, name } : s)), []);
-  const handleReorderSheets = React.useCallback((dragIndex, dropIndex) => {
-    setSheets(prevSheets => {
-      const newSheets = [...prevSheets];
-      const [draggedItem] = newSheets.splice(dragIndex, 1);
-      newSheets.splice(dropIndex, 0, draggedItem);
-      return newSheets;
-    });
-  }, []);
+    redoStackRef.current = [];
+  };
 
-  const activeSheet = React.useMemo(() => sheets.find(s => s.id === activeSheetId), [sheets, activeSheetId]);
+  const undo = () => {
+    const prev = undoStackRef.current.pop();
+    if (!prev) return;
+    redoStackRef.current.push({ sheets, activeSheetId, globalSettings });
+    setSheets(prev.sheets);
+    setActiveSheetId(prev.activeSheetId);
+    setGlobalSettings(prev.globalSettings);
+  };
 
-  const handleAddEvaluation = React.useCallback((evalData) => {
+  const redo = () => {
+    const next = redoStackRef.current.pop();
+    if (!next) return;
+    undoStackRef.current.push({ sheets, activeSheetId, globalSettings });
+    setSheets(next.sheets);
+    setActiveSheetId(next.activeSheetId);
+    setGlobalSettings(next.globalSettings);
+  };
+
+  const handleUpdateSheet = u => setSheets(p => p.map(s => s.id === u.id ? u : s));
+
+  const handleCreateSheet = () => {
+    const sheet = { id: generateId(), name: `Hoja ${sheets.length + 1}`, studentHeader: 'Alumnos', evaluations: [], studentData: [], studentColumnWidth: 200 };
+    setSheets(p => [...p, sheet]);
+    setActiveSheetId(sheet.id);
+  };
+
+  const handleAddEvaluation = data => {
     if (!activeSheet) return;
-    const newEvaluation = {
-      ...evalData,
-      id: generateId(),
-      differentiatedScores: { enabled: false, green: evalData.maxScore, yellow: evalData.maxScore, blue: evalData.maxScore }
-    };
-    const updatedSheet = {
+    pushHistory();
+    const ev = { ...data, id: generateId(), differentiatedScores: { enabled: false, green: data.maxScore, yellow: data.maxScore, blue: data.maxScore } };
+    handleUpdateSheet({
       ...activeSheet,
-      evaluations: [...activeSheet.evaluations, newEvaluation],
-      studentData: activeSheet.studentData.map(s => ({ ...s, scores: [...s.scores, ''], offsets: Array.isArray(s.offsets) ? [...s.offsets, ''] : [...Array(activeSheet.evaluations.length).fill(''), ''] }))
-    };
-    handleUpdateSheet(updatedSheet);
-  }, [activeSheet, handleUpdateSheet]);
+      evaluations: [...activeSheet.evaluations, ev],
+      studentData: activeSheet.studentData.map(s => ({ ...s, scores: [...s.scores, ''], offsets: [...(s.offsets || []), ''] }))
+    });
+  };
 
-  const handleAddStudent = React.useCallback(() => {
+  const handleAddStudent = () => {
     if (!activeSheet) return;
-    const newStudent = {
-      id: generateId(),
-      name: `Estudiante ${activeSheet.studentData.length + 1}`,
-      scores: Array(activeSheet.evaluations.length).fill(''),
-      offsets: Array(activeSheet.evaluations.length).fill(''),
-      highlight: null
+    pushHistory();
+    const st = { id: generateId(), name: `Estudiante ${activeSheet.studentData.length + 1}`, scores: Array(activeSheet.evaluations.length).fill(''), offsets: Array(activeSheet.evaluations.length).fill(''), highlight: null };
+    handleUpdateSheet({ ...activeSheet, studentData: [...activeSheet.studentData, st] });
+  };
+
+  React.useEffect(() => {
+    const handler = e => {
+      const isMac = navigator.platform.toUpperCase().includes('MAC');
+      const ctrl = isMac ? e.metaKey : e.ctrlKey;
+      if (!ctrl) return;
+      if (e.key === 'z' || e.key === 'Z') {
+        e.preventDefault();
+        e.shiftKey ? redo() : undo();
+      }
+      if (e.key === 'y' || e.key === 'Y') {
+        e.preventDefault();
+        redo();
+      }
+      if (e.shiftKey && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        handleAddStudent();
+      }
+      if (e.shiftKey && (e.key === 'e' || e.key === 'E')) {
+        e.preventDefault();
+        handleAddEvaluation({ name: 'Nueva evaluación', maxScore: 10, exigency: 60 });
+      }
     };
-    handleUpdateSheet({ ...activeSheet, studentData: [...activeSheet.studentData, newStudent] });
-  }, [activeSheet, handleUpdateSheet]);
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [undo, redo, handleAddStudent, handleAddEvaluation]);
 
-  const handleFileImport = React.useCallback((file) => {
+  const handleFileImport = file => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = e => {
       const data = new Uint8Array(e.target.result);
-      window.loadXLSX().then((XLSX) => {
-        try {
-          const workbook = XLSX.read(data, { type: 'array' });
-          const importedSheets = workbook.SheetNames.map(sheetName => {
-            const sheet = workbook.Sheets[sheetName];
-            const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-            
-            // Validar estructura básica (mínimo 5 filas de cabecera)
-            if (!json || json.length < 5) return null;
-
-            const name = sheetName;
-            
-            // 1. DETECCIÓN INTELIGENTE DE CABECERAS (Fila 4 es el estándar visual)
-            const headerRowIndex = 4; 
-            const headerRow = json[headerRowIndex];
-
-            // Buscar columna de nombres de alumnos (contiene 'Alumnos', 'Estudiantes', etc.)
-            let studentColIdx = headerRow.findIndex(c => c && String(c).match(/alumnos|nombres|estudiantes|student/i));
-            if (studentColIdx === -1) studentColIdx = 1; // Fallback a columna B si no se encuentra
-            
-            const studentHeader = headerRow[studentColIdx] || 'Alumnos';
-            const highlightColIndex = headerRow.findIndex(c => c && String(c).toLowerCase().includes('highlight'));
-
-            const evaluations = [];
-
-            // 2. DETECTAR EVALUACIONES ESCANEANDO LA FILA 0
-            // Una evaluación existe si tiene Título (fila 0) y Puntaje Máximo (fila 1) en la misma columna
-            for (let i = studentColIdx + 1; i < json[0].length; i++) {
-              const evalName = json[0][i];
-              const maxScoreVal = json[1][i];
-
-              if (!evalName || !maxScoreVal) continue; // No es el inicio de una evaluación
-
-              const maxScore = parseFloat(maxScoreVal);
-              const exigency = parseFloat(json[2][i]);
-
-              if (isNaN(maxScore) || isNaN(exigency)) continue;
-
-              // --- AQUI ESTA LA CLAVE: BUSCAR COLUMNAS POR NOMBRE ---
-              // Determinamos el rango de búsqueda para esta evaluación (desde esta columna hasta la siguiente evaluación)
-              let limit = json[0].length;
-              for (let k = i + 1; k < json[0].length; k++) {
-                if (json[0][k] && json[1][k]) { // Encontramos la siguiente evaluación
-                  limit = k;
-                  break;
-                }
-              }
-
-              // Buscamos "Puntaje" y "Offset" dentro del rango de esta evaluación
-              let scoreIdx = -1;
-              let offsetIdx = -1;
-
-              for (let c = i; c < limit; c++) {
-                const header = String(headerRow[c] || '').trim().toLowerCase();
-                if (header === 'puntaje') scoreIdx = c;
-                if (header === 'offset') offsetIdx = c;
-              }
-
-              // Si no dice explícitamente "Puntaje", asumimos que es la primera columna del bloque
-              if (scoreIdx === -1) scoreIdx = i;
-
-              const diffScoresRaw = String(json[3][i + 1] || '').split(',');
-
-              evaluations.push({
-                id: generateId(),
-                name: String(evalName),
-                maxScore,
-                exigency,
-                differentiatedScores: {
-                  enabled: json[3][i] === 'SI',
-                  green: parseFloat(diffScoresRaw[0]) || maxScore,
-                  yellow: parseFloat(diffScoresRaw[1]) || maxScore,
-                  blue: parseFloat(diffScoresRaw[2]) || maxScore,
-                },
-                // Guardamos temporalmente los índices detectados para usarlos al leer alumnos
-                _readIndices: { score: scoreIdx, offset: offsetIdx }
-              });
-            }
-
-            if (evaluations.length === 0) return null;
-
-            // 3. LEER DATOS DE ALUMNOS USANDO LOS ÍNDICES DETECTADOS
-            const studentData = json.slice(5).map(r => {
-              if (!r[studentColIdx]) return null; // Fila vacía o sin nombre
-
-              return {
-                id: generateId(),
-                name: String(r[studentColIdx]),
-                // Mapear puntajes usando el índice específico detectado para cada evaluación
-                scores: evaluations.map(ev => {
-                  const idx = ev._readIndices.score;
-                  return (idx !== -1) ? String(r[idx] || '') : '';
-                }),
-                // Mapear offsets usando el índice específico detectado (o vacío si no existe)
-                offsets: evaluations.map(ev => {
-                  const idx = ev._readIndices.offset;
-                  return (idx !== -1) ? String(r[idx] || '') : '';
-                }),
-                highlight: highlightColIndex !== -1 ? (r[highlightColIndex] || null) : null
-              };
-            }).filter(Boolean);
-            
-            // Limpieza: eliminar propiedades temporales
-            evaluations.forEach(ev => delete ev._readIndices);
-
-            if (studentData.length === 0) return null;
-
-            return {
-              id: generateId(),
-              name,
-              studentHeader,
-              evaluations,
-              studentData,
-              studentColumnWidth: 200
-            };
-          }).filter(Boolean);
-
-          if (importedSheets.length === 0) {
-            alert('No se encontraron datos válidos en el archivo Excel.');
-            return;
-          }
-
-          setPendingImport(importedSheets);
-        } catch (err) {
-          console.error("Error importing file:", err);
-          alert("Hubo un error al procesar el archivo. Verifique el formato.");
-        }
+      window.loadXLSX().then(XLSX => {
+        const wb = XLSX.read(data, { type: 'array' });
+        const imported = wb.SheetNames.map(name => parseSheetToModel(name, wb.Sheets[name], XLSX)).filter(Boolean);
+        if (imported.length) setPendingImport(imported);
       });
     };
     reader.readAsArrayBuffer(file);
-  }, []);
+  };
 
   const handleConfirmReplace = () => {
+    pushHistory();
     setSheets(pendingImport);
     setActiveSheetId(pendingImport[0]?.id || null);
     setPendingImport(null);
   };
+
   const handleConfirmAdd = () => {
-    setSheets(prev => [...prev, ...pendingImport]);
+    pushHistory();
+    setSheets(p => [...p, ...pendingImport]);
     if (!activeSheetId) setActiveSheetId(pendingImport[0]?.id || null);
     setPendingImport(null);
   };
 
-  const handleExport = React.useCallback(() => {
-    window.loadXLSX().then(() => {
+  const handleExport = () => {
+    window.loadXLSX().then(XLSX => {
       const wb = XLSX.utils.book_new();
-    sheets.forEach(sheet => {
-      const processedData = sheet.studentData.map((student, index) => {
-        let total = 0, count = 0;
-        const row = [index + 1, student.name];
-        sheet.evaluations.forEach((ev, i) => {
-          let maxScore = ev.maxScore;
-          if (ev.differentiatedScores.enabled && student.highlight) {
-            maxScore = ev.differentiatedScores[student.highlight] || ev.maxScore;
-          }
-          const numericScore = parseFloat(student.scores[i]);
-const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings);
-          row.push(student.scores[i] ?? '', isNaN(grade) ? '' : grade.toFixed(1), (student.offsets||[])[i] ?? '');
-          if (!isNaN(grade)) { total += grade; count++; }
+      sheets.forEach(sheet => {
+        const rows = sheet.studentData.map((st, idx) => {
+          let total = 0, count = 0;
+          const row = [idx + 1, st.name];
+          sheet.evaluations.forEach((ev, i) => {
+            let maxScore = ev.maxScore;
+            if (ev.differentiatedScores.enabled && st.highlight) maxScore = ev.differentiatedScores[st.highlight] || ev.maxScore;
+            const score = parseFloat(st.scores[i]);
+            const grade = calculateGrade(score, maxScore, ev.exigency, globalSettings);
+            row.push(st.scores[i] ?? '', isNaN(grade) ? '' : grade.toFixed(1), (st.offsets || [])[i] ?? '');
+            if (!isNaN(grade)) { total += grade; count++; }
+          });
+          const avg = count ? (total / count) : NaN;
+          row.push(isNaN(avg) ? '' : avg.toFixed(1));
+          row.push(st.highlight || '');
+          return row;
         });
-        const avg = count > 0 ? (total / count) : NaN;
-        row.push(isNaN(avg) ? '' : avg.toFixed(1));
-        row.push(student.highlight || '');
-        return row;
+        const aoa = [
+          ['', '', ...sheet.evaluations.flatMap(ev => [ev.name, '', ''])],
+          ['', 'P. Máx:', ...sheet.evaluations.flatMap(ev => [ev.maxScore, '', ''])],
+          ['', 'Exig:', ...sheet.evaluations.flatMap(ev => [ev.exigency, '', ''])],
+          ['', 'Diferenciados', ...sheet.evaluations.flatMap(ev => [ev.differentiatedScores.enabled ? 'SI' : 'NO', `${ev.differentiatedScores.green},${ev.differentiatedScores.yellow},${ev.differentiatedScores.blue}`, ''])],
+          ['#', sheet.studentHeader, ...sheet.evaluations.flatMap(() => ['Puntaje', 'Nota', 'Offset']), 'Promedio Final', 'Highlight'],
+          ...rows
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        XLSX.utils.book_append_sheet(wb, ws, sheet.name);
       });
-      const aoa = [
-        ['', '', ...sheet.evaluations.flatMap(ev => [ev.name, '', ''])],
-        ['', 'P. Máx:', ...sheet.evaluations.flatMap(ev => [ev.maxScore, '', ''])],
-        ['', 'Exig:', ...sheet.evaluations.flatMap(ev => [ev.exigency, '', ''])],
-        ['', 'Diferenciados', ...sheet.evaluations.flatMap(ev => [ev.differentiatedScores.enabled ? 'SI' : 'NO', `${ev.differentiatedScores.green},${ev.differentiatedScores.yellow},${ev.differentiatedScores.blue}`, ''])],
-        ['#', sheet.studentHeader, ...sheet.evaluations.flatMap(() => ['Puntaje', 'Nota', 'Offset']), 'Promedio Final', 'Highlight'],
-        ...processedData
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      XLSX.utils.book_append_sheet(wb, ws, sheet.name);
-    });
       XLSX.writeFile(wb, 'calculadora_notas.xlsx');
-    }); // end loadXLSX then
-  }, [sheets, globalSettings]);
-
-  // Atajos teclado
-  React.useEffect(() => {
-    const onKey = (e) => {
-      if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); handleAddStudent(); }
-      if (e.ctrlKey && e.shiftKey && e.key === 'Enter') { e.preventDefault(); handleAddEvaluation({ name: 'Nueva Evaluación', maxScore: 10, exigency: 60 }); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [handleAddStudent, handleAddEvaluation]);
+    });
+  };
 
   return (
-    <>
-      <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-screen">
+    <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-screen">
       {pendingImport && (
-        <ImportConfirmationModal pending={pendingImport} existingSheets={sheets}
+        <ImportConfirmationModal
+          pending={pendingImport}
+          existingSheets={sheets}
           onConfirmReplace={handleConfirmReplace}
           onConfirmAdd={handleConfirmAdd}
           onCancel={() => setPendingImport(null)}
         />
       )}
-
-      <Header activeSheet={activeSheet}
+      <Header
+        activeSheet={activeSheet}
         onAddEvaluation={handleAddEvaluation}
         onAddStudent={handleAddStudent}
         onFileImport={handleFileImport}
@@ -1749,88 +1563,48 @@ const grade = calculateGrade(numericScore, maxScore, ev.exigency, globalSettings
         isSaving={isSaving}
         lastSaved={lastSaved}
         onToggleSettings={() => setSettingsOpen(v => !v)}
-        onShareByCode={handleShareByCode}
-        onOpenLoadByCode={() => setOpenLoadByCode(true)}
-        shareDisabled={!fbReady} syncCode={syncCode} onStopSync={stopSync}
       />
-
-      {/* Popover de configuración (reemplaza la tarjeta "Cargar Archivo") */}
       <SettingsPopover anchorId="settings-btn" open={settingsOpen} onClose={() => setSettingsOpen(false)}>
         <GlobalSettings settings={globalSettings} setSettings={setGlobalSettings} />
       </SettingsPopover>
-
-      {sheets.length > 0 && activeSheetId && activeSheet ? (
-        <div>
-          <Tabs
-            sheets={sheets}
-            activeSheetId={activeSheetId}
-            onSelectTab={setActiveSheetId}
-            onDeleteTab={handleDeleteSheet}
-            onRenameTab={handleRenameSheet}
-            onAddTab={handleCreateSheet}
-            onReorderSheets={handleReorderSheets}
-          />
-          <GradesTable key={activeSheetId} sheet={activeSheet} onUpdateSheet={handleUpdateSheet} globalSettings={globalSettings} />
-        </div>
+      {sheets.length > 0 && (
+        <Tabs
+          sheets={sheets}
+          activeSheetId={activeSheetId}
+          onSelectTab={setActiveSheetId}
+          onAddTab={handleCreateSheet}
+          onRenameTab={(id, name) => setSheets(p => p.map(s => s.id === id ? { ...s, name } : s))}
+          onDeleteTab={id => setSheets(p => {
+            const next = p.filter(s => s.id !== id);
+            if (activeSheetId === id) setActiveSheetId(next[0]?.id || null);
+            return next;
+          })}
+          onReorderSheets={(from, to) => setSheets(p => {
+            const next = [...p];
+            const [moved] = next.splice(from, 1);
+            next.splice(to, 0, moved);
+            return next;
+          })}
+        />
+      )}
+      {sheets.length && activeSheet ? (
+        <GradesTable key={activeSheetId} sheet={activeSheet} onUpdateSheet={handleUpdateSheet} globalSettings={globalSettings} />
       ) : (
         <div className="text-center bg-white p-10 rounded-lg shadow-md">
           <h2 className="text-2xl font-bold text-gray-700 mb-4">Comienza a Calcular Notas</h2>
           <p className="text-gray-500 mb-6">Puedes importar un archivo de Excel o crear una tabla manualmente.</p>
-          <button onClick={handleCreateSheet} className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700">
-            Crear Tabla Manualmente
-          </button>
+          <button onClick={handleCreateSheet} className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700">Crear Tabla Manualmente</button>
         </div>
       )}
     </div>
-      {/* Modal: Abrir por código */}
-      {openLoadByCode && ReactDOM.createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
-          <div className="bg-white p-5 rounded-lg shadow-xl w-[min(420px,95vw)]">
-            <h3 className="text-lg font-semibold mb-2">Abrir por código</h3>
-            <p className="text-sm text-gray-600 mb-3">Ingresa el código compartido para añadir o reemplazar las hojas actuales:</p>
-            <input value={codeInput} onChange={e => setCodeInput(e.target.value.toUpperCase())}
-                   className="border rounded px-2 py-2 w-full font-mono mb-4" placeholder="CÓDIGO" />
-            <div className="flex justify-end gap-2">
-              <button className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300" onClick={() => setOpenLoadByCode(false)}>Cancelar</button>
-              <button onClick={handleLoadByCodeAdd} className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Añadir</button>
-              <button onClick={handleLoadByCodeReplace} className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700">Reemplazar</button>
-            </div>
-          </div>
-        </div>,
-        document.getElementById('portal-root')
-      )}
-    {/* Modal: Código generado */}
-      {shareOpen && ReactDOM.createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
-                    <div className="bg-white p-5 rounded-lg shadow-xl w-[min(420px,95vw)]">
-            <h3 className="text-lg font-semibold mb-2">Código de tabla</h3>
-            <p className="text-sm text-gray-600 mb-3">Comparte este código para abrir esta tabla en otro dispositivo:</p>
-            <div className="flex items-center gap-2 mb-4">
-              <input className="border rounded px-2 py-1 w-full text-center font-mono text-lg" readOnly value={shareCode} />
-              <button className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300"
-                onClick={() => { navigator.clipboard?.writeText(shareCode); }}>Copiar</button>
-            </div>
-            <div className="flex justify-end">
-              <button className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300" onClick={() => setShareOpen(false)}>Cerrar</button>
-            </div>
-          </div>
-        </div>,
-        document.getElementById('portal-root')
-      )}
-
-    </>
-
   );
 };
 
-// Montaje
 const rootElement = document.getElementById('root');
 if (rootElement) {
-  const root = ReactDOM.createRoot(rootElement);
-  root.render(<App />);
-} else {
-  console.error('No se encontró el elemento #root');
+  ReactDOM.createRoot(rootElement).render(<App />);
 }
+
 </script>
 <script>
 // Keep browser UI (address bar) in sync with our theme, and avoid UA auto dark.
