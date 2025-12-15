@@ -1,14 +1,26 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="light">
 <head>
   <meta id="meta-theme" name="theme-color" content="#ffffff">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="color-scheme" content="light dark">
-  <meta name="supported-color-schemes" content="light dark">
   <title>Calculadora de Notas</title>
-  <meta name="theme-color" content="#f3f4f6">
+  
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Configuración explícita de Tailwind para que obedezca a la clase "dark"
+    tailwind.config = {
+      darkMode: 'class', // Estrategia manual por clase
+      theme: {
+        extend: {
+          colors: {
+            // Mapeo opcional por si queremos usar clases tipo text-theme-fg
+          }
+        }
+      }
+    }
+  </script>
   
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -18,7 +30,6 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <script>
-    // Lazy loader for XLSX (shared by Import/Export)
     window.loadXLSX = function() {
       if (window.XLSX) return Promise.resolve(window.XLSX);
       if (window.__loadingXLSX) return window.__loadingXLSX;
@@ -35,36 +46,52 @@
   </script>
 
   <style>
-/* --- Theming via data-theme (limpio) --- */
-:root{
-  --bg:#ffffff;
-  --fg:#0f172a;
-  --card:#f8fafc;
-  --border:#e2e8f0;
-  --muted:#64748b;
-  --accent:#2563eb;
-}
-[data-theme="dark"]{
-  --bg:#0b1220;
-  --fg:#e5e7eb;
-  --card:#0f172a;
-  --border:#1f2937;
-  --muted:#94a3b8;
-  --accent:#60a5fa;
-}
-html, body { background: var(--bg); color: var(--fg); }
-header, .card { background: var(--card); border-color: var(--border); }
-input, select, button { color: var(--fg); background: var(--bg); border-color: var(--border); }
-.muted { color: var(--muted); }
+    /* --- Theming System --- */
+    :root {
+      /* Light Mode Defaults */
+      --bg: #f9fafb;       /* gray-50 */
+      --card: #ffffff;     /* white */
+      --fg: #111827;       /* gray-900 */
+      --muted: #6b7280;    /* gray-500 */
+      --border: #e5e7eb;   /* gray-200 */
+      --input-bg: #ffffff;
+      --hover: #f3f4f6;    /* gray-100 */
+    }
 
-    body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--fg); }
+    /* Activamos las variables cuando existe la clase .dark (Estrategia Tailwind) */
+    html.dark {
+      --bg: #0f172a;       /* slate-900 */
+      --card: #1e293b;     /* slate-800 */
+      --fg: #f3f4f6;       /* gray-100 */
+      --muted: #94a3b8;    /* slate-400 */
+      --border: #334155;   /* slate-700 */
+      --input-bg: #0f172a; /* slate-900 */
+      --hover: #334155;    /* slate-700 */
+      color-scheme: dark;  /* Fuerza scrollbars oscuros */
+    }
+
+    body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--fg); transition: background-color 0.3s, color 0.3s; }
     
-    .grade-fail { color: #dc2626; font-weight: bold; }
-    .grade-pass { color: #1d4ed8; font-weight: bold; }
-    .tab.active { border-bottom-color: white; }
+    /* Input overrides específicos para mantener consistencia */
+    .dark input[type="text"], 
+    .dark input[type="number"], 
+    .dark select, 
+    .dark textarea {
+      background-color: var(--input-bg);
+      color: var(--fg);
+      border-color: var(--border);
+    }
+
+    /* Colores de Resaltado (Highlight) Adaptativos */
     .highlight-green { background-color: #dcfce7 !important; }
     .highlight-yellow { background-color: #fef9c3 !important; }
     .highlight-blue { background-color: #dbeafe !important; }
+
+    /* En modo oscuro, usamos versiones transparentes para que no sean tan brillantes */
+    .dark .highlight-green { background-color: rgba(22, 101, 52, 0.4) !important; }
+    .dark .highlight-yellow { background-color: rgba(161, 98, 7, 0.4) !important; }
+    .dark .highlight-blue { background-color: rgba(30, 64, 175, 0.4) !important; }
+
     input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     input[type=number] { -moz-appearance: textfield; }
     .resize-handle { display: none !important; }
@@ -74,65 +101,12 @@ input, select, button { color: var(--fg); background: var(--bg); border-color: v
     .dragging-over-tab { border-right: 3px solid #3b82f6; opacity: 0.7; }
     .draggable-tab { cursor: grab; }
     .draggable-tab:active { cursor: grabbing; }
-  
-    /* Dark mode helpers */
-    
-    
-    
-    
-    
-    
-    .resize-handle { display: none !important; }
-    
-    
-    
-    
-    
-    
-    
-
-    /* --- Dark mode specific adjustments --- */
-    
-    
-    
-    
-    
-
-    /* Dark-mode fixes for sheet tabs */
-    
-    
-    
-    
-    /* Contrast tweaks for dark mode */
-    
-    
-    
-    
-    
-    
-    
-
-    /* Explicitly declare color-scheme to prevent browser auto-dark inversion */
-    html { color-scheme: light; }
-    
-    html:not(.dark) body { background-color: #f3f4f6; }
-
-    /* Light mode column background fixes */
-    
-    
-    
-
-    /* Ensure light-mode text is dark */
-    
-    
   </style>
 
-  <!-- Firebase SDKs (Compat) -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script>
-    // Firebase config
     window.__FIREBASE_CONFIG__ = {
       apiKey: "AIzaSyBpN50N83IzA7H3VAf8p7h1-vJNLZHZHrM",
       authDomain: "calculadora-notas-b101b.firebaseapp.com",
@@ -142,7 +116,6 @@ input, select, button { color: var(--fg); background: var(--bg); border-color: v
       appId: "1:404555844235:web:0ab33d589d3c3c0d37e28e"
     };
     
-    // Simplified Firebase init
     (function() {
       const cfg = window.__FIREBASE_CONFIG__;
       if (!cfg?.apiKey || !cfg?.projectId) {
@@ -150,7 +123,6 @@ input, select, button { color: var(--fg); background: var(--bg); border-color: v
         console.warn('[Firebase] Config incomplete');
         return;
       }
-      
       try {
         firebase.initializeApp(cfg);
         window.__FB_DB__ = firebase.firestore();
@@ -165,23 +137,27 @@ input, select, button { color: var(--fg); background: var(--bg); border-color: v
     })();
   </script>
 </head>
-<body class="bg-gray-50">
+<body class="bg-[var(--bg)] text-[var(--fg)]">
 <div id="root"></div>
 <div id="portal-root"></div>
 
 <script type="text/babel" data-presets="env,react">
-// --- Theme manager ---
+// --- Theme manager (IIFE) ---
 (function(){
   const META = document.getElementById('meta-theme');
   const ROOT = document.documentElement;
-  const BTN = () => document.getElementById('themeToggle');
   
   function applyTheme(mode){
-    ROOT.setAttribute('data-theme', mode);
+    // Ahora usamos CLASES para Tailwind
+    if (mode === 'dark') {
+      ROOT.classList.add('dark');
+      ROOT.setAttribute('data-theme', 'dark'); // Mantener compatibilidad
+    } else {
+      ROOT.classList.remove('dark');
+      ROOT.setAttribute('data-theme', 'light');
+    }
+    
     try { if (META) META.setAttribute('content', mode === 'dark' ? '#0b1220' : '#ffffff'); } catch {}
-    const text = (mode === 'dark' ? 'Oscuro' : 'Claro');
-    const icon = (mode === 'dark' ? '🌙' : '🌞');
-    if (BTN()) BTN().innerHTML = icon + ' <span id="themeLabel">' + text + '</span>';
     localStorage.setItem('theme-mode', mode);
   }
   
@@ -193,23 +169,13 @@ input, select, button { color: var(--fg); background: var(--bg); border-color: v
   }
   
   window.__toggleTheme = function(){
-    const current = ROOT.getAttribute('data-theme') || 'light';
-    applyTheme(current === 'dark' ? 'light' : 'dark');
+    const isDark = ROOT.classList.contains('dark');
+    applyTheme(isDark ? 'light' : 'dark');
   };
   
-  document.addEventListener('DOMContentLoaded', function(){
-    initTheme();
-    const btn = BTN();
-    if (btn) btn.addEventListener('click', window.__toggleTheme);
-    document.addEventListener('keydown', e => {
-      if (e.key && e.key.toLowerCase() === 't') window.__toggleTheme();
-    });
-  });
+  initTheme();
 })();
 
-/* =========================
-   CONFIG / UTILIDADES
-   ========================= */
 const normalizeNumberInput = (value) => {
   if (value === null || value === undefined) return '';
   const stringValue = String(value);
@@ -265,24 +231,19 @@ const loadStateFromLocalStorage = () => {
   }
 };
 
-/* =========================
-   REUSABLE COMPONENTS
-   ========================= */
-
-// ✅ NEW: Reusable Button Component
 const Button = React.memo(({ variant = 'primary', children, className = '', ...props }) => {
   const variants = {
-    primary: 'bg-blue-500 text-white hover:bg-blue-600',
-    secondary: 'bg-gray-700 text-white hover:bg-gray-800',
-    success: 'bg-green-500 text-white hover:bg-green-600',
-    danger: 'bg-red-600 text-white hover:bg-red-700',
-    warning: 'bg-orange-500 text-white hover:bg-orange-600',
-    ghost: 'bg-gray-200 hover:bg-gray-300'
+    primary: 'bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600',
+    secondary: 'bg-gray-700 text-white hover:bg-gray-800 dark:bg-slate-700 dark:hover:bg-slate-600',
+    success: 'bg-green-600 text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600',
+    danger: 'bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600',
+    warning: 'bg-orange-500 text-white hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-500',
+    ghost: 'bg-[var(--bg)] hover:bg-[var(--hover)] text-[var(--fg)] border border-[var(--border)]'
   };
   
   return (
     <button 
-      className={`px-4 py-2 rounded-md shadow-sm ${variants[variant]} disabled:bg-gray-300 disabled:cursor-not-allowed ${className}`}
+      className={`px-4 py-2 rounded-md shadow-sm transition-colors ${variants[variant]} disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
       {...props}
     >
       {children}
@@ -290,7 +251,6 @@ const Button = React.memo(({ variant = 'primary', children, className = '', ...p
   );
 });
 
-// ✅ NEW: Reusable Modal Component
 const Modal = ({ open, onClose, title, children, maxWidth = '420px', className = '' }) => {
   const ref = React.useRef(null);
   
@@ -312,34 +272,16 @@ const Modal = ({ open, onClose, title, children, maxWidth = '420px', className =
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
       <div 
         ref={ref} 
-        className={`bg-white p-5 rounded-lg shadow-xl ${className}`}
+        className={`bg-[var(--card)] p-5 rounded-lg shadow-xl text-[var(--fg)] border border-[var(--border)] ${className}`}
         style={{ width: `min(${maxWidth},95vw)` }}
       >
-        {title && <h3 className="text-lg font-semibold mb-2">{title}</h3>}
+        {title && <h3 className="text-lg font-semibold mb-2 text-[var(--fg)]">{title}</h3>}
         {children}
       </div>
     </div>,
     document.getElementById('portal-root')
   );
 };
-
-/* =========================
-   UI COMPONENTS
-   ========================= */
-const NumberInput = React.memo(({ value, onChange, min, max, step, className }) => {
-  const [isValid, setIsValid] = React.useState(true);
-  const handleChange = (e) => {
-    const norm = normalizeNumberInput(e.target.value);
-    if (norm === null) { setIsValid(false); return; }
-    setIsValid(true);
-    onChange(norm);
-  };
-  return (
-    <input type="text" value={value} onChange={handleChange}
-           className={`${className} ${!isValid ? 'border-red-500' : ''}`}
-           min={min} max={max} step={step}/>
-  );
-});
 
 const AddEvalDropdown = React.memo(({ onAdd, onClose }) => {
   const [name, setName] = React.useState('Nueva Evaluación');
@@ -360,19 +302,19 @@ const AddEvalDropdown = React.memo(({ onAdd, onClose }) => {
   };
 
   return (
-    <div ref={dropdownRef} className="absolute top-full right-0 mt-2 w-64 bg-white rounded-md shadow-lg z-30 p-4 border">
+    <div ref={dropdownRef} className="absolute top-full right-0 mt-2 w-64 bg-[var(--card)] rounded-md shadow-lg z-30 p-4 border border-[var(--border)]">
       <div className="space-y-3">
         <div>
-          <label className="block text-sm font-medium text-gray-700">Nombre</label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+          <label className="block text-sm font-medium text-[var(--fg)]">Nombre</label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-[var(--border)] rounded-md bg-[var(--input-bg)] text-[var(--fg)]"/>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700">Puntaje Máximo</label>
-          <input type="text" value={maxScore} onChange={e => { const n = normalizeNumberInput(e.target.value); if (n !== null) setMaxScore(n); }} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+          <label className="block text-sm font-medium text-[var(--fg)]">Puntaje Máximo</label>
+          <input type="text" value={maxScore} onChange={e => { const n = normalizeNumberInput(e.target.value); if (n !== null) setMaxScore(n); }} className="mt-1 block w-full px-3 py-2 border border-[var(--border)] rounded-md bg-[var(--input-bg)] text-[var(--fg)]"/>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700">Exigencia (%)</label>
-          <input type="text" value={exigency} onChange={e => { const n = normalizeNumberInput(e.target.value); if (n !== null) setExigency(n); }} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+          <label className="block text-sm font-medium text-[var(--fg)]">Exigencia (%)</label>
+          <input type="text" value={exigency} onChange={e => { const n = normalizeNumberInput(e.target.value); if (n !== null) setExigency(n); }} className="mt-1 block w-full px-3 py-2 border border-[var(--border)] rounded-md bg-[var(--input-bg)] text-[var(--fg)]"/>
         </div>
         <div className="flex justify-end">
           <Button variant="primary" onClick={handleSubmit}>Añadir</Button>
@@ -408,21 +350,21 @@ const DiffScoreDropdown = ({ evaluation, onSave, onClose }) => {
     setEvalData(prev => ({ ...prev, differentiatedScores: { ...prev.differentiatedScores, [color]: normalized } }));
   };
 
-  const colorClasses = { green: 'text-green-600', yellow: 'text-yellow-600', blue: 'text-blue-600' };
+  const colorClasses = { green: 'text-green-600 dark:text-green-400', yellow: 'text-yellow-600 dark:text-yellow-400', blue: 'text-blue-600 dark:text-blue-400' };
 
   const dropdownContent = (
-    <div ref={dropdownRef} className="absolute bg-white rounded-md shadow-lg z-[9999] p-4 border w-64" style={{ top: `${position.top}px`, left: `${position.left}px` }}>
+    <div ref={dropdownRef} className="absolute bg-[var(--card)] rounded-md shadow-lg z-[9999] p-4 border border-[var(--border)] w-64" style={{ top: `${position.top}px`, left: `${position.left}px` }}>
       <div className="space-y-3">
         <div className="flex items-center">
-          <input type="checkbox" checked={evalData.differentiatedScores.enabled} onChange={handleToggle} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-          <label className="ml-2 block text-sm text-gray-900">Habilitar diferenciados</label>
+          <input type="checkbox" checked={evalData.differentiatedScores.enabled} onChange={handleToggle} className="h-4 w-4 text-blue-600 border-[var(--border)] rounded"/>
+          <label className="ml-2 block text-sm text-[var(--fg)]">Habilitar diferenciados</label>
         </div>
         {evalData.differentiatedScores.enabled && (
           <div className="space-y-2">
             {['green', 'yellow', 'blue'].map(color => (
               <div key={color}>
-                <label className="block text-xs font-medium text-gray-700">P. Máx. <span className={`font-bold ${colorClasses[color]}`}>{color.charAt(0).toUpperCase() + color.slice(1)}</span></label>
-                <input type="text" value={evalData.differentiatedScores[color]} onChange={e => handleChange(color, e.target.value)} className="mt-1 block w-full px-2 py-1 border rounded-md text-sm"/>
+                <label className="block text-xs font-medium text-[var(--muted)]">P. Máx. <span className={`font-bold ${colorClasses[color]}`}>{color.charAt(0).toUpperCase() + color.slice(1)}</span></label>
+                <input type="text" value={evalData.differentiatedScores[color]} onChange={e => handleChange(color, e.target.value)} className="mt-1 block w-full px-2 py-1 border border-[var(--border)] rounded-md bg-[var(--input-bg)] text-[var(--fg)] text-sm"/>
               </div>
             ))}
           </div>
@@ -460,34 +402,34 @@ const ImportConfirmationModal = ({ pending, existingSheets, onConfirmReplace, on
 
   return (
     <Modal open={true} onClose={onCancel} maxWidth="1000px" className="max-h-[85vh] flex flex-col">
-      <h3 className="text-lg font-bold mb-1">Importar hojas desde Excel</h3>
-      <p className="text-sm text-gray-600 mb-3">
+      <h3 className="text-lg font-bold mb-1 text-[var(--fg)]">Importar hojas desde Excel</h3>
+      <p className="text-sm text-[var(--muted)] mb-3">
         Se detectaron <strong>{summary.totals.sheets}</strong> hoja(s), <strong>{summary.totals.students}</strong> alumno(s) totales y <strong>{summary.totals.evaluations}</strong> evaluación(es) en total.
       </p>
 
-      <div className="border rounded-md overflow-hidden">
-        <div className="grid grid-cols-12 bg-gray-50 text-xs font-medium text-gray-700 border-b">
+      <div className="border border-[var(--border)] rounded-md overflow-hidden">
+        <div className="grid grid-cols-12 bg-[var(--bg)] text-xs font-medium text-[var(--muted)] border-b border-[var(--border)]">
           <div className="col-span-4 p-2">Hoja</div>
           <div className="col-span-2 p-2 text-center">Alumnos</div>
           <div className="col-span-2 p-2 text-center">Evaluaciones</div>
           <div className="col-span-4 p-2">Preview</div>
         </div>
-        <div className="max-h-[48vh] overflow-auto divide-y">
+        <div className="max-h-[48vh] overflow-auto divide-y divide-[var(--border)]">
           {summary.items.map((it) => (
             <div key={it.index} className="grid grid-cols-12 items-start text-sm">
               <div className="col-span-4 p-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold">{it.name}</span>
+                  <span className="font-semibold text-[var(--fg)]">{it.name}</span>
                   {it.willReplace
-                    ? <span className="text-amber-700 bg-amber-100 px-2 py-0.5 rounded text-xs">Coincide con una existente</span>
-                    : <span className="text-green-700 bg-green-100 px-2 py-0.5 rounded text-xs">Nueva</span>
+                    ? <span className="text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-900/30 px-2 py-0.5 rounded text-xs">Coincide</span>
+                    : <span className="text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs">Nueva</span>
                   }
                 </div>
               </div>
-              <div className="col-span-2 p-2 text-center">{it.students}</div>
-              <div className="col-span-2 p-2 text-center">{it.evaluations}</div>
+              <div className="col-span-2 p-2 text-center text-[var(--fg)]">{it.students}</div>
+              <div className="col-span-2 p-2 text-center text-[var(--fg)]">{it.evaluations}</div>
               <div className="col-span-4 p-2">
-                <div className="text-xs text-gray-700 flex gap-3 flex-wrap">
+                <div className="text-xs text-[var(--muted)] flex gap-3 flex-wrap">
                   <div><span className="font-medium">Alumnos:</span> {it.sampleStudents.length ? it.sampleStudents.join(', ') : '—'}</div>
                   <div><span className="font-medium">Evaluaciones:</span> {it.sampleEvaluations.length ? it.sampleEvaluations.join(', ') : '—'}</div>
                 </div>
@@ -498,15 +440,15 @@ const ImportConfirmationModal = ({ pending, existingSheets, onConfirmReplace, on
       </div>
 
       {summary.totals.willReplace > 0 && (
-        <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-          <strong>Advertencia:</strong> {summary.totals.willReplace} hoja(s) del archivo tienen el mismo nombre que hojas existentes. <em>Reemplazar</em> las sobrescribirá; <em>Añadir</em> creará duplicados con el mismo nombre.
+        <div className="mt-3 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-2">
+          <strong>Advertencia:</strong> {summary.totals.willReplace} hoja(s) coinciden.
         </div>
       )}
 
       <div className="flex justify-end gap-2 mt-4">
         <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
-        <Button variant="primary" onClick={onConfirmAdd}>Añadir a las existentes</Button>
-        <Button variant="danger" onClick={onConfirmReplace}>Reemplazar todo</Button>
+        <Button variant="primary" onClick={onConfirmAdd}>Añadir</Button>
+        <Button variant="danger" onClick={onConfirmReplace}>Reemplazar</Button>
       </div>
     </Modal>
   );
@@ -529,11 +471,11 @@ const OffsetModal = ({ open, onClose, onApply, studentName, evalName, value }) =
   
   return (
     <Modal open={open} onClose={onClose} title="Ajuste de nota">
-      <p className="text-sm text-gray-600 mb-3">Se sumará a la nota calculada para esta celda (ej: 0,3 o -0,2).</p>
-      <div className="text-xs text-gray-500 mb-3"><b>Alumno:</b> {studentName || '—'} · <b>Evaluación:</b> {evalName || '—'}</div>
+      <p className="text-sm text-[var(--muted)] mb-3">Se sumará a la nota calculada para esta celda.</p>
+      <div className="text-xs text-[var(--muted)] mb-3"><b>Alumno:</b> {studentName || '—'} · <b>Evaluación:</b> {evalName || '—'}</div>
       <div className="flex items-center gap-2">
         <input value={txt} onChange={e => setTxt(parse(e.target.value))} inputMode="decimal"
-               className="border rounded px-2 py-2 w-full font-mono text-lg" placeholder="0,0" />
+               className="border border-[var(--border)] rounded px-2 py-2 w-full font-mono text-lg bg-[var(--input-bg)] text-[var(--fg)]" placeholder="0,0" />
         <div className="flex flex-col gap-2">
           <Button variant="ghost" onClick={()=>step(-0.1)} className="px-3 py-2">−0,1</Button>
           <Button variant="ghost" onClick={()=>step(+0.1)} className="px-3 py-2">+0,1</Button>
@@ -578,11 +520,11 @@ const SettingsPopover = ({ anchorId, open, onClose, children }) => {
   if (!open) return null;
 
   const content = (
-    <div ref={popRef} className="absolute z-[10001] bg-white border rounded-lg shadow-xl w-[320px] p-4"
+    <div ref={popRef} className="absolute z-[10001] bg-[var(--card)] border border-[var(--border)] rounded-lg shadow-xl w-[320px] p-4 text-[var(--fg)]"
          style={{ top: pos.top, left: pos.left }} role="dialog" aria-modal="true">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-700">Configuración de Escala de Notas</h3>
-        <button onClick={onClose} aria-label="Cerrar" className="text-gray-500 hover:text-red-600">&times;</button>
+        <h3 className="text-sm font-semibold text-[var(--fg)]">Configuración de Escala</h3>
+        <button onClick={onClose} aria-label="Cerrar" className="text-[var(--muted)] hover:text-red-600">&times;</button>
       </div>
       {children}
     </div>
@@ -636,9 +578,9 @@ const Header = React.memo(({
   };
 
   return (
-    <header className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b-2 border-gray-200">
+    <header className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b-2 border-[var(--border)] bg-[var(--card)] px-4 py-4 rounded-lg shadow-sm">
       <div className="flex items-center gap-2">
-        <h1 className="text-3xl font-bold text-gray-800">Calculadora de Notas</h1>
+        <h1 className="text-3xl font-bold text-[var(--fg)]">Calculadora de Notas</h1>
         <Button 
           id="settings-btn" 
           onClick={onToggleSettings}
@@ -649,7 +591,7 @@ const Header = React.memo(({
         >
           Configuración ⚙️
         </Button>
-        <span className={`ml-2 text-sm ${isSaving ? 'text-yellow-600 animate-pulse' : 'text-green-600'}`}>
+        <span className={`ml-2 text-sm ${isSaving ? 'text-yellow-600 dark:text-yellow-400 animate-pulse' : 'text-green-600 dark:text-green-400'}`}>
           {isSaving ? 'Guardando…' : `✓ Guardado${lastSaved ? ' ' + lastSaved.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}`}{syncCode ? ` · Sync: ${syncCode}` : ''}
         </span>
       </div>
@@ -679,12 +621,12 @@ const Header = React.memo(({
             Importar ▾
           </Button>
           {importOpen && (
-            <div className="absolute right-0 mt-2 w-56 bg-white border rounded shadow z-30">
-              <button className="w-full text-left px-3 py-2 hover:bg-gray-50"
+            <div className="absolute right-0 mt-2 w-56 bg-[var(--card)] border border-[var(--border)] rounded shadow z-30">
+              <button className="w-full text-left px-3 py-2 hover:bg-[var(--hover)] text-[var(--fg)]"
                       onClick={() => { setImportOpen(false); window.loadXLSX().finally(() => { fileInputRef.current && fileInputRef.current.click(); }); }}>
                 Desde Excel (.xlsx)
               </button>
-              <button className="w-full text-left px-3 py-2 hover:bg-gray-50"
+              <button className="w-full text-left px-3 py-2 hover:bg-[var(--hover)] text-[var(--fg)]"
                       onClick={() => { setImportOpen(false); onOpenLoadByCode(); }}>
                 Desde código (Firebase)
               </button>
@@ -702,21 +644,21 @@ const Header = React.memo(({
             Exportar / Compartir ▾
           </Button>
           {menuOpen && (
-            <div className="absolute right-0 mt-2 w-64 bg-white border rounded shadow z-30">
-              <button className="w-full text-left px-3 py-2 hover:bg-gray-50"
+            <div className="absolute right-0 mt-2 w-64 bg-[var(--card)] border border-[var(--border)] rounded shadow z-30">
+              <button className="w-full text-left px-3 py-2 hover:bg-[var(--hover)] text-[var(--fg)]"
                       onClick={() => { setMenuOpen(false); onExport(); }}>
                 Exportar a Excel (.xlsx)
               </button>
-              <div className="border-t my-1"></div>
-              <button className="w-full text-left px-3 py-2 hover:bg-gray-50 disabled:text-gray-400"
+              <div className="border-t border-[var(--border)] my-1"></div>
+              <button className="w-full text-left px-3 py-2 hover:bg-[var(--hover)] text-[var(--fg)] disabled:text-[var(--muted)]"
                       disabled={shareDisabled}
                       onClick={() => { setMenuOpen(false); onShareByCode(); }}>
                 Generar código (Firebase)
               </button>
               {syncCode && (
                 <>
-                  <div className="border-t my-1"></div>
-                  <button className="w-full text-left px-3 py-2 hover:bg-gray-50"
+                  <div className="border-t border-[var(--border)] my-1"></div>
+                  <button className="w-full text-left px-3 py-2 hover:bg-[var(--hover)] text-[var(--fg)]"
                           onClick={() => { setMenuOpen(false); onStopSync(); }}>
                     Detener sincronización
                   </button>
@@ -757,23 +699,23 @@ const GlobalSettings = React.memo(({ settings, setSettings }) => {
     <div className="space-y-3">
       {['minGrade', 'passingGrade', 'maxGrade'].map(k => (
         <div key={k}>
-          <label className="block text-sm font-medium text-gray-500">{labels[k]}</label>
-          <input type="text" value={displayValues[k]} onChange={e => handleDisplayChange(k, e.target.value)} onBlur={() => handleBlur(k)} className="mt-1 w-full p-2 border rounded-md"/>
+          <label className="block text-sm font-medium text-[var(--muted)]">{labels[k]}</label>
+          <input type="text" value={displayValues[k]} onChange={e => handleDisplayChange(k, e.target.value)} onBlur={() => handleBlur(k)} className="mt-1 w-full p-2 border border-[var(--border)] rounded-md bg-[var(--input-bg)] text-[var(--fg)]"/>
         </div>
       ))}
     
-      <div className="pt-2 mt-1 border-t">
-        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+      <div className="pt-2 mt-1 border-t border-[var(--border)]">
+        <label className="inline-flex items-center gap-2 text-sm text-[var(--fg)]">
           <input
             type="checkbox"
             checked={!!settings.showAdvanced}
             onChange={e => setSettings(p => ({ ...p, showAdvanced: e.target.checked }))}
           />
-          <span>Mostrar datos avanzados (promedios por evaluación y no aprobadas)</span>
+          <span>Mostrar datos avanzados</span>
         </label>
       
       <div className="pt-2 mt-1">
-        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+        <label className="inline-flex items-center gap-2 text-sm text-[var(--fg)]">
           <input
             type="checkbox"
             checked={!!settings.darkMode}
@@ -800,10 +742,14 @@ const Tabs = React.memo(({ sheets, activeSheetId, onSelectTab, onDeleteTab, onRe
   const handleDragEnd = () => { setDraggedIndex(null); setDragOverIndex(null); };
 
   return (
-    <div className="flex border-b border-gray-200">
+    <div className="flex border-b border-[var(--border)]">
       {sheets.map((s, i) => (
         <div key={s.id}
-             className={`tab flex items-center px-4 py-2 border-t border-l border-r rounded-t-lg cursor-pointer -mb-px draggable-tab ${activeSheetId === s.id ? 'active bg-white dark:bg-gray-800 font-semibold' : 'bg-gray-200 dark:bg-gray-700 dark:text-gray-200'} ${dragOverIndex === i ? 'dragging-over-tab' : ''}`}
+             className={`tab flex items-center px-4 py-2 border-t border-l border-r rounded-t-lg cursor-pointer -mb-px draggable-tab transition-colors
+               ${activeSheetId === s.id 
+                 ? 'bg-[var(--card)] border-[var(--border)] border-b-transparent font-semibold text-[var(--fg)] z-10' 
+                 : 'bg-[var(--bg)] border-transparent text-[var(--muted)] hover:bg-[var(--hover)]'} 
+               ${dragOverIndex === i ? 'dragging-over-tab' : ''}`}
              onClick={() => onSelectTab(s.id)}
              onDoubleClick={() => { setEditingId(s.id); setName(s.name); }}
              draggable="true"
@@ -813,14 +759,14 @@ const Tabs = React.memo(({ sheets, activeSheetId, onSelectTab, onDeleteTab, onRe
              onDragEnd={handleDragEnd}
              onDragLeave={() => setDragOverIndex(null)}>
           {editingId === s.id
-            ? <input type="text" value={name} onChange={e => setName(e.target.value)} onBlur={() => handleRename(s.id)} onKeyDown={e => e.key === 'Enter' && handleRename(s.id)} autoFocus className="bg-transparent"/>
+            ? <input type="text" value={name} onChange={e => setName(e.target.value)} onBlur={() => handleRename(s.id)} onKeyDown={e => e.key === 'Enter' && handleRename(s.id)} autoFocus className="bg-transparent text-[var(--fg)]"/>
             : <span>{s.name}</span>}
           {activeSheetId === s.id && (
-            <button aria-label={`Eliminar hoja ${s.name}`} onClick={e => { e.stopPropagation(); onDeleteTab(s.id); }} className="ml-3 text-gray-500 hover:text-red-600">&times;</button>
+            <button aria-label={`Eliminar hoja ${s.name}`} onClick={e => { e.stopPropagation(); onDeleteTab(s.id); }} className="ml-3 text-[var(--muted)] hover:text-red-600">&times;</button>
           )}
         </div>
       ))}
-      <Button variant="ghost" aria-label="Añadir nueva hoja" onClick={onAddTab} className="rounded-t-lg">+</Button>
+      <Button variant="ghost" aria-label="Añadir nueva hoja" onClick={onAddTab} className="rounded-t-lg border-b-0">+</Button>
     </div>
   );
 });
@@ -857,7 +803,7 @@ const StudentRow = React.memo(({
     <tr className={`group h-14 ${student.highlight ? `highlight-${student.highlight}` : ''}`}>
       {evaluations.map((ev, e) => (
         <React.Fragment key={ev.id}>
-          <td className={`p-1 text-sm text-center w-20 ${!student.highlight && e % 2 !== 0 ? 'bg-gray-50' : ''}`}>
+          <td className={`p-1 text-sm text-center w-20 border-r border-[var(--border)] ${!student.highlight && e % 2 !== 0 ? 'bg-[var(--bg)]' : ''}`}>
             <input
               type="text"
               value={student.scores[e] ?? ''}
@@ -866,18 +812,18 @@ const StudentRow = React.memo(({
               onFocus={() => setEditingRow(rowIndex)}
               onKeyDown={evt => handleKeyDown(evt, rowIndex, e)}
               ref={el => inputRefs.current[`${rowIndex}-${e}`] = el}
-              className="w-20 text-center bg-transparent focus:bg-yellow-100 p-2 rounded"
+              className="w-20 text-center bg-transparent focus:bg-[var(--hover)] p-2 rounded text-[var(--fg)] outline-none"
             />
           </td>
-          <td title="Doble‑click para ajustar" onDoubleClick={()=>onOpenOffset(rowIndex, e)} className={`p-1 text-sm text-center font-bold w-20 ${
-              !isNaN(rowData.grades[e]) && (rowData.grades[e] >= globalSettings.passingGrade ? 'grade-pass' : 'grade-fail')
-            } ${!student.highlight && e % 2 !== 0 ? 'bg-gray-50' : ''}`}>
+          <td title="Doble‑click para ajustar" onDoubleClick={()=>onOpenOffset(rowIndex, e)} className={`p-1 text-sm text-center font-bold w-20 border-r border-[var(--border)] ${
+              !isNaN(rowData.grades[e]) && (rowData.grades[e] >= globalSettings.passingGrade ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400')
+            } ${!student.highlight && e % 2 !== 0 ? 'bg-[var(--bg)]' : ''}`}>
             {isNaN(rowData.grades[e]) ? 'N/A' : rowData.grades[e].toFixed(1)}
           </td>
         </React.Fragment>
       ))}
-      <td className={`p-4 text-sm text-center font-bold bg-green-50 ${
-          !isNaN(rowData.avg) && (rowData.avg >= globalSettings.passingGrade ? 'grade-pass' : 'grade-fail')}`}>
+      <td className={`p-4 text-sm text-center font-bold bg-[var(--bg)] border-l border-[var(--border)] ${
+          !isNaN(rowData.avg) && (rowData.avg >= globalSettings.passingGrade ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400')}`}>
         {isNaN(rowData.avg) ? 'N/A' : rowData.avg.toFixed(1)}
       </td>
     </tr>
@@ -1083,10 +1029,10 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
 
   const StudentColumnPortal = studentRoot ? ReactDOM.createPortal(
     <table className="table-fixed border-separate" style={{ borderSpacing: 0 }}>
-      <thead className="bg-gray-50">
+      <thead className="bg-[var(--bg)]">
       <tr className="h-16">
-        <th rowSpan="3" className="p-3 w-12 text-left text-xs font-medium text-gray-500 border-b-2">#</th>
-        <th style={{ width: `${sheet.studentColumnWidth}px`}} rowSpan="3" className="p-3 text-left text-xs font-medium text-gray-500 border-b-2 relative">
+        <th rowSpan="3" className="p-3 w-12 text-left text-xs font-medium text-[var(--muted)] border-b-2 border-[var(--border)]">#</th>
+        <th style={{ width: `${sheet.studentColumnWidth}px`}} rowSpan="3" className="p-3 text-left text-xs font-medium text-[var(--muted)] border-b-2 border-[var(--border)] relative">
           <div className="flex items-center justify-between pr-6">
             <span>{sheet.studentHeader}</span>
             <Button
@@ -1104,12 +1050,12 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
       <tr className="h-10"></tr>
       <tr className="h-10"></tr>
       </thead>
-      <tbody className="bg-white divide-y divide-gray-200">
+      <tbody className="bg-[var(--card)] divide-y divide-[var(--border)]">
       {sheet.studentData.map((s, r) => (
         <tr key={s.id} className={`group h-14 ${s.highlight ? `highlight-${s.highlight}`:''}`}>
-          <td className="p-4 text-sm relative text-center">{r+1}
+          <td className="p-4 text-sm relative text-center text-[var(--fg)]">{r+1}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button aria-label={`Eliminar estudiante ${s.name}`} onClick={()=>delStudent(r)} className="p-1 bg-white rounded shadow hover:bg-red-100"><span className="text-red-500 font-bold">×</span></button>
+              <button aria-label={`Eliminar estudiante ${s.name}`} onClick={()=>delStudent(r)} className="p-1 bg-[var(--card)] rounded shadow hover:bg-red-100 dark:hover:bg-red-900/30"><span className="text-red-500 font-bold">×</span></button>
             </div>
           </td>
           <td className="p-1 text-sm">
@@ -1118,9 +1064,9 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
                 type="text"
                 value={s.name}
                 onChange={e => handleNameChange(r, e.target.value)}
-                className={`bg-transparent w-full focus:bg-yellow-100 p-2 rounded ${editingRow === r ? 'font-bold text-blue-700 dark:text-blue-300' : ''}`}
+                className={`bg-transparent w-full focus:bg-[var(--hover)] p-2 rounded text-[var(--fg)] ${editingRow === r ? 'font-bold' : ''}`}
               />
-              <button aria-label="Cambiar color de resaltado" onClick={() => handleHighlight(r)} className="ml-2 text-xl text-gray-500 hover:text-blue-600" title="Cambiar color">🎨</button>
+              <button aria-label="Cambiar color de resaltado" onClick={() => handleHighlight(r)} className="ml-2 text-xl text-[var(--muted)] hover:text-blue-600" title="Cambiar color">🎨</button>
             </div>
           </td>
         </tr>
@@ -1128,14 +1074,14 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
       </tbody>
 
       {globalSettings?.showAdvanced && (
-        <tfoot className="bg-gray-50">
+        <tfoot className="bg-[var(--bg)]">
           <tr className="h-10">
             <td className="p-1 w-12"></td>
-            <td className="p-1 text-xs text-gray-700">Promedios por evaluación</td>
+            <td className="p-1 text-xs text-[var(--muted)]">Promedios por evaluación</td>
           </tr>
           <tr className="h-10">
             <td className="p-1 w-12"></td>
-            <td className="p-1 text-xs text-gray-700">No aprobadas</td>
+            <td className="p-1 text-xs text-[var(--muted)]">No aprobadas</td>
           </tr>
         </tfoot>
       )}
@@ -1152,46 +1098,46 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
         ))}
       </colgroup>
 
-      <thead className="bg-gray-50">
+      <thead className="bg-[var(--bg)]">
       <tr className="h-16">
         {sheet.evaluations.map((ev, i) => (
           <th key={ev.id} colSpan="2"
-              className={`p-3 text-center text-xs font-medium text-gray-500 relative group draggable-header ${i % 2 !== 0 ? 'bg-gray-100' : ''} ${dragOverIndex === i ? 'dragging-over-col' : ''}`}
+              className={`p-3 text-center text-xs font-medium text-[var(--muted)] relative group draggable-header border-b border-[var(--border)] ${i % 2 !== 0 ? 'bg-[var(--hover)]' : ''} ${dragOverIndex === i ? 'dragging-over-col' : ''}`}
               draggable="true"
               onDragStart={(e) => handleDragStart(e, i)} onDragOver={(e) => handleDragOver(e, i)} onDrop={(e) => handleDrop(e, i)} onDragEnd={handleDragEnd} onDragLeave={() => setDragOverIndex(null)}>
             <div className="flex justify-center items-center">
-              <input type="text" value={ev.name} onChange={e => handleEvalNameChange(i, e.target.value)} className="font-bold text-base bg-transparent w-full text-center focus:bg-yellow-100 px-1 rounded"/>
+              <input type="text" value={ev.name} onChange={e => handleEvalNameChange(i, e.target.value)} className="font-bold text-base bg-transparent w-full text-center focus:bg-[var(--hover)] px-1 rounded text-[var(--fg)]"/>
               <div className="relative">
-                <button aria-label={`Configuración para ${ev.name}`} data-dropdown-id={ev.id} onClick={() => setOpenDropdownEvalId(openDropdownEvalId === ev.id ? null : ev.id)} className="ml-2 text-lg text-gray-500 hover:text-blue-600">⚙️</button>
+                <button aria-label={`Configuración para ${ev.name}`} data-dropdown-id={ev.id} onClick={() => setOpenDropdownEvalId(openDropdownEvalId === ev.id ? null : ev.id)} className="ml-2 text-lg text-[var(--muted)] hover:text-blue-600">⚙️</button>
                 {openDropdownEvalId === ev.id && <DiffScoreDropdown evaluation={ev} onSave={handleSaveDiffScores} onClose={() => setOpenDropdownEvalId(null)} />}
               </div>
               <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button aria-label={`Eliminar evaluación ${ev.name}`} onClick={() => delEval(i)} className="p-1 bg-white rounded shadow hover:bg-red-100"><span className="text-red-500 font-bold">×</span></button>
+                <button aria-label={`Eliminar evaluación ${ev.name}`} onClick={() => delEval(i)} className="p-1 bg-[var(--card)] rounded shadow hover:bg-red-100 dark:hover:bg-red-900/30"><span className="text-red-500 font-bold">×</span></button>
               </div>
             </div>
           </th>
         ))}
-        <th rowSpan="3" className="p-3 w-28 text-center text-xs font-medium text-gray-500 bg-green-50 border-b-2">Promedio</th>
+        <th rowSpan="3" className="p-3 w-28 text-center text-xs font-medium text-[var(--muted)] bg-[var(--bg)] border-b-2 border-l border-[var(--border)]">Promedio</th>
       </tr>
       <tr className="h-10">
         {sheet.evaluations.map((ev, i) =>
-          <th key={ev.id} colSpan="2" className={`p-1 ${i % 2 !== 0 ? 'bg-gray-100' : ''}`}>
-            <div className="flex justify-center items-center space-x-2">
+          <th key={ev.id} colSpan="2" className={`p-1 ${i % 2 !== 0 ? 'bg-[var(--hover)]' : ''}`}>
+            <div className="flex justify-center items-center space-x-2 text-[var(--fg)]">
               <label className="text-xs">P.Máx:</label>
-              <input type="text" value={ev.maxScore} onChange={e => handleEvalHeaderChange(i, 'maxScore', e.target.value)} className="w-16 p-1 text-xs border rounded" />
+              <input type="text" value={ev.maxScore} onChange={e => handleEvalHeaderChange(i, 'maxScore', e.target.value)} className="w-16 p-1 text-xs border border-[var(--border)] rounded bg-[var(--input-bg)] text-[var(--fg)]" />
               <label className="text-xs">Exig:</label>
-              <input type="text" value={ev.exigency} onChange={e => handleEvalHeaderChange(i, 'exigency', e.target.value)} className="w-16 p-1 text-xs border rounded"/>
+              <input type="text" value={ev.exigency} onChange={e => handleEvalHeaderChange(i, 'exigency', e.target.value)} className="w-16 p-1 text-xs border border-[var(--border)] rounded bg-[var(--input-bg)] text-[var(--fg)]"/>
             </div>
           </th>)}
       </tr>
       <tr className="h-10">
         {sheet.evaluations.map((ev, i) => <React.Fragment key={ev.id}>
-          <th className={`border-t border-b-2 p-1 w-20 text-xs font-medium text-gray-500 ${i % 2 !== 0 ? 'bg-gray-100' : ''}`}>Puntaje</th>
-          <th className={`border-t border-b-2 p-1 w-20 bg-blue-50 text-xs font-medium ${i % 2 !== 0 ? 'bg-gray-100' : ''}`}>Nota</th>
+          <th className={`border-t border-b-2 border-[var(--border)] p-1 w-20 text-xs font-medium text-[var(--muted)] ${i % 2 !== 0 ? 'bg-[var(--hover)]' : ''}`}>Puntaje</th>
+          <th className={`border-t border-b-2 border-[var(--border)] p-1 w-20 bg-[var(--hover)] text-xs font-medium text-[var(--fg)] ${i % 2 !== 0 ? 'bg-[var(--hover)]' : ''}`}>Nota</th>
         </React.Fragment>)}
       </tr>
       </thead>
-      <tbody className="bg-white divide-y divide-gray-200">
+      <tbody className="bg-[var(--card)] divide-y divide-[var(--border)]">
       {sheet.studentData.map((s, r) => (
         <StudentRow key={s.id} student={s} rowIndex={r} evaluations={sheet.evaluations} onOpenOffset={onOpenOffset}
             globalSettings={globalSettings} handleScoreChange={handleScoreChange}
@@ -1201,12 +1147,12 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
       </tbody>
 
       {globalSettings?.showAdvanced && advancedStats && (
-        <tfoot className="bg-gray-50">
+        <tfoot className="bg-[var(--bg)]">
           <tr className="h-10">
             {sheet.evaluations.map((ev, i) => (
               <React.Fragment key={ev.id}>
-                <td className="p-1 w-20"></td>
-                <td className="p-1 w-20 text-xs font-semibold text-gray-700">{isNaN(advancedStats.avg[i]) ? '—' : advancedStats.avg[i].toFixed(1)}</td>
+                <td className="p-1 w-20 border-t border-[var(--border)]"></td>
+                <td className="p-1 w-20 text-xs font-semibold text-[var(--fg)] border-t border-[var(--border)]">{isNaN(advancedStats.avg[i]) ? '—' : advancedStats.avg[i].toFixed(1)}</td>
               </React.Fragment>
             ))}
           </tr>
@@ -1214,7 +1160,7 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
             {sheet.evaluations.map((ev, i) => (
               <React.Fragment key={ev.id}>
                 <td className="p-1 w-20"></td>
-                <td className="p-1 w-20 text-xs text-gray-700">No aprob.: {advancedStats.fails[i]}</td>
+                <td className="p-1 w-20 text-xs text-[var(--muted)]">No aprob.: {advancedStats.fails[i]}</td>
               </React.Fragment>
             ))}
           </tr>
@@ -1223,7 +1169,7 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
     </table>, gradesRoot) : null;
 
   return (
-    <div className="bg-white p-2 sm:p-4 rounded-b-lg shadow-md flex relative">
+    <div className="bg-[var(--card)] p-2 sm:p-4 rounded-b-lg shadow-md flex relative border border-[var(--border)] border-t-0">
       <div ref={setStudentRoot} className="relative flex-shrink-0"></div>
       <div ref={setGradesRoot} className="overflow-x-auto flex-grow"></div>
       {StudentColumnPortal}
@@ -1243,18 +1189,18 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
         maxWidth="900px"
         className="max-h-[85vh] flex flex-col"
       >
-        <h3 className="text-lg font-semibold mb-2">Lista de alumnos</h3>
-        <p className="text-sm text-gray-600 mb-3">
+        <h3 className="text-lg font-semibold mb-2 text-[var(--fg)]">Lista de alumnos</h3>
+        <p className="text-sm text-[var(--muted)] mb-3">
           Pega o escribe un alumno por línea (también acepta comas o tabulaciones).
           Puedes <strong>Reemplazar</strong> la lista actual o <strong>Añadir</strong> solo los nuevos.
         </p>
         <textarea
-          className="border rounded p-3 text-sm flex-1 min-h-[220px] outline-none focus:ring-2 focus:ring-blue-500"
+          className="border border-[var(--border)] rounded p-3 text-sm flex-1 min-h-[220px] outline-none focus:ring-2 focus:ring-blue-500 bg-[var(--input-bg)] text-[var(--fg)]"
           value={studentListText}
           onChange={e => setStudentListText(e.target.value)}
           placeholder={"Ejemplo:\nJuan Pérez\nMaría López\nAna Díaz"}
         />
-        <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
+        <div className="flex items-center justify-between mt-3 text-xs text-[var(--muted)]">
           <div>Actual: {sheet.studentData.length} alumnos · Evaluaciones: {sheet.evaluations.length}</div>
           <div className="space-x-2">
             <Button variant="ghost" onClick={() => setStudentListOpen(false)}>Cancelar</Button>
@@ -1362,13 +1308,20 @@ const defaultState = {
 
 const getInitialState = () => {
   const loaded = loadStateFromLocalStorage();
-  if (!loaded) return defaultState;
+  const currentDomTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+  
+  if (!loaded) return { ...defaultState, globalSettings: { ...defaultState.globalSettings, darkMode: currentDomTheme } };
+  
   const sheetsWithWidth = (loaded.sheets || []).map(s => ({ ...s, studentColumnWidth: s.studentColumnWidth || 200 }));
   return {
     ...defaultState,
     ...loaded,
     sheets: sheetsWithWidth,
-    globalSettings: { ...defaultState.globalSettings, ...(loaded.globalSettings || {}) }
+    globalSettings: { 
+        ...defaultState.globalSettings, 
+        ...(loaded.globalSettings || {}),
+        darkMode: currentDomTheme // Sincronización forzada
+    }
   };
 };
 
@@ -1385,6 +1338,21 @@ const App = () => {
 
   const undoStackRef = React.useRef([]);
   const redoStackRef = React.useRef([]);
+
+  // Sync React State with DOM Theme + Class
+  React.useEffect(() => {
+    const mode = globalSettings.darkMode ? 'dark' : 'light';
+    if (document.documentElement.getAttribute('data-theme') !== mode) {
+        document.documentElement.setAttribute('data-theme', mode);
+        // CRUCIAL para Tailwind dark: classes
+        if (mode === 'dark') document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+        
+        localStorage.setItem('theme-mode', mode);
+        const meta = document.getElementById('meta-theme');
+        if (meta) meta.setAttribute('content', mode === 'dark' ? '#0b1220' : '#ffffff');
+    }
+  }, [globalSettings.darkMode]);
 
   React.useEffect(() => {
     setIsSaving(true);
@@ -1407,6 +1375,9 @@ const App = () => {
       activeSheetId,
       globalSettings
     });
+    if (undoStackRef.current.length > 50) {
+      undoStackRef.current.shift();
+    }
     redoStackRef.current = [];
   };
 
@@ -1543,7 +1514,7 @@ const App = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-screen">
+    <div className="p-4 sm:p-6 lg:p-8 min-h-screen bg-[var(--bg)] text-[var(--fg)]">
       {pendingImport && (
         <ImportConfirmationModal
           pending={pendingImport}
@@ -1590,9 +1561,9 @@ const App = () => {
       {sheets.length && activeSheet ? (
         <GradesTable key={activeSheetId} sheet={activeSheet} onUpdateSheet={handleUpdateSheet} globalSettings={globalSettings} />
       ) : (
-        <div className="text-center bg-white p-10 rounded-lg shadow-md">
-          <h2 className="text-2xl font-bold text-gray-700 mb-4">Comienza a Calcular Notas</h2>
-          <p className="text-gray-500 mb-6">Puedes importar un archivo de Excel o crear una tabla manualmente.</p>
+        <div className="text-center p-10 rounded-lg shadow-md bg-[var(--card)] text-[var(--fg)]">
+          <h2 className="text-2xl font-bold mb-4">Comienza a Calcular Notas</h2>
+          <p className="mb-6 text-[var(--muted)]">Puedes importar un archivo de Excel o crear una tabla manualmente.</p>
           <button onClick={handleCreateSheet} className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700">Crear Tabla Manualmente</button>
         </div>
       )}
