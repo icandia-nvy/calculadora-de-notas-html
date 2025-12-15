@@ -9,13 +9,15 @@
   
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    // Configuración explícita de Tailwind para que obedezca a la clase "dark"
+    // MEJORA 3: Configuración explícita de Tailwind
+    // Esto asegura que las clases 'dark:' solo se activen cuando la clase 'dark' esté presente en el HTML
     tailwind.config = {
-      darkMode: 'class', // Estrategia manual por clase
+      darkMode: 'class', 
       theme: {
         extend: {
           colors: {
-            // Mapeo opcional por si queremos usar clases tipo text-theme-fg
+            // Podemos mapear colores de Tailwind a nuestras variables CSS si lo deseamos
+            // pero usar las clases dark:bg-slate-900 es más directo y efectivo.
           }
         }
       }
