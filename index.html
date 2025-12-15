@@ -88,11 +88,15 @@
     .highlight-green { background-color: #dcfce7 !important; }
     .highlight-yellow { background-color: #fef9c3 !important; }
     .highlight-blue { background-color: #dbeafe !important; }
+    /* MEJORA 2: Estilo Visual para Retirado (Rojo) */
+    .highlight-red { background-color: #fee2e2 !important; }
 
     /* En modo oscuro, usamos versiones transparentes para que no sean tan brillantes */
     .dark .highlight-green { background-color: rgba(22, 101, 52, 0.4) !important; }
     .dark .highlight-yellow { background-color: rgba(161, 98, 7, 0.4) !important; }
     .dark .highlight-blue { background-color: rgba(30, 64, 175, 0.4) !important; }
+    /* MEJORA 2 (Dark Mode) */
+    .dark .highlight-red { background-color: rgba(127, 29, 29, 0.4) !important; }
 
     input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     input[type=number] { -moz-appearance: textfield; }
@@ -801,6 +805,9 @@ const StudentRow = React.memo(({
     return { grades, avg };
   }, [student.scores, student.offsets, student.highlight, evaluations, globalSettings]);
 
+  // MEJORA 3: Lógica de Renderizado
+  const isWithdrawn = student.highlight === 'red';
+
   return (
     <tr className={`group h-14 ${student.highlight ? `highlight-${student.highlight}` : ''}`}>
       {evaluations.map((ev, e) => (
@@ -808,23 +815,24 @@ const StudentRow = React.memo(({
           <td className={`p-1 text-sm text-center w-20 border-r border-[var(--border)] ${!student.highlight && e % 2 !== 0 ? 'bg-[var(--bg)]' : ''}`}>
             <input
               type="text"
+              disabled={isWithdrawn}
               value={student.scores[e] ?? ''}
               onChange={evt => handleScoreChange(rowIndex, e, evt.target.value)}
               onBlur={() => { handleScoreBlur(rowIndex, e); setEditingRow(null); }}
               onFocus={() => setEditingRow(rowIndex)}
               onKeyDown={evt => handleKeyDown(evt, rowIndex, e)}
               ref={el => inputRefs.current[`${rowIndex}-${e}`] = el}
-              className="w-20 text-center bg-transparent focus:bg-[var(--hover)] p-2 rounded text-[var(--fg)] outline-none"
+              className={`w-20 text-center bg-transparent focus:bg-[var(--hover)] p-2 rounded text-[var(--fg)] outline-none ${isWithdrawn ? 'cursor-not-allowed opacity-50 text-gray-500' : ''}`}
             />
           </td>
           <td title="Doble‑click para ajustar" onDoubleClick={()=>onOpenOffset(rowIndex, e)} className={`p-1 text-sm text-center font-bold w-20 border-r border-[var(--border)] ${
               !isNaN(rowData.grades[e]) && (rowData.grades[e] >= globalSettings.passingGrade ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400')
-            } ${!student.highlight && e % 2 !== 0 ? 'bg-[var(--bg)]' : ''}`}>
+            } ${!student.highlight && e % 2 !== 0 ? 'bg-[var(--bg)]' : ''} ${isWithdrawn ? 'opacity-50' : ''}`}>
             {isNaN(rowData.grades[e]) ? 'N/A' : rowData.grades[e].toFixed(1)}
           </td>
         </React.Fragment>
       ))}
-      <td className={`p-4 text-sm text-center font-bold bg-[var(--bg)] border-l border-[var(--border)] ${
+      <td className={`p-4 text-sm text-center font-bold bg-[var(--bg)] border-l border-[var(--border)] ${isWithdrawn ? 'opacity-50' : ''} ${
           !isNaN(rowData.avg) && (rowData.avg >= globalSettings.passingGrade ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400')}`}>
         {isNaN(rowData.avg) ? 'N/A' : rowData.avg.toFixed(1)}
       </td>
@@ -981,7 +989,16 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
   const handleDragEnd = React.useCallback(() => { setDraggedIndex(null); setDragOverIndex(null); }, []);
 
   const handleNameChange = React.useCallback((r, v) => { const d = [...sheet.studentData]; d[r].name = v; update({ studentData: d }); }, [sheet.studentData, update]);
-  const handleHighlight = React.useCallback((r) => { const h = ['green','yellow','blue',null]; const d = [...sheet.studentData]; d[r].highlight = h[(h.indexOf(d[r].highlight) + 1) % 4]; update({ studentData: d }); }, [sheet.studentData, update]);
+  
+  // MEJORA 1: Modificar la Lógica del Botón
+  const handleHighlight = React.useCallback((r) => { 
+    // Agregamos 'red' al ciclo de colores
+    const h = ['green', 'yellow', 'blue', 'red', null]; 
+    const d = [...sheet.studentData]; 
+    d[r].highlight = h[(h.indexOf(d[r].highlight) + 1) % h.length]; 
+    update({ studentData: d }); 
+  }, [sheet.studentData, update]);
+
   const handleEvalHeaderChange = React.useCallback((index, field, value) => {
     const normalized = normalizeNumberInput(value);
     if (normalized === null) return;
@@ -1064,9 +1081,14 @@ const GradesTable = ({ sheet, onUpdateSheet, globalSettings }) => {
             <div className="flex items-center">
               <input
                 type="text"
+                disabled={s.highlight === 'red'}
                 value={s.name}
                 onChange={e => handleNameChange(r, e.target.value)}
-                className={`bg-transparent w-full focus:bg-[var(--hover)] p-2 rounded text-[var(--fg)] ${editingRow === r ? 'font-bold' : ''}`}
+                className={`w-full p-2 rounded transition-all ${
+                  editingRow === r 
+                    ? 'font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-400 dark:ring-blue-500 shadow-md' 
+                    : 'bg-transparent text-[var(--fg)] focus:bg-[var(--hover)]'
+                } ${s.highlight === 'red' ? 'line-through text-gray-500 italic cursor-not-allowed' : ''}`}
               />
               <button aria-label="Cambiar color de resaltado" onClick={() => handleHighlight(r)} className="ml-2 text-xl text-[var(--muted)] hover:text-blue-600" title="Cambiar color">🎨</button>
             </div>
