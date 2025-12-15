@@ -1606,11 +1606,5 @@ if (rootElement) {
 }
 
 </script>
-<script>
-// Keep browser UI (address bar) in sync with our theme, and avoid UA auto dark.
-(const mo = new MutationObserver(apply);
-  mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-  apply();
-})();
-</script></body>
+</body>
 </html>
