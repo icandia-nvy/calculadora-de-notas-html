@@ -1536,61 +1536,139 @@ const App = () => {
   }, [activeSheet, handleUpdateSheet]);
 
   const handleFileImport = React.useCallback((file) => {
-    if (!file) return;
-    window.loadXLSX().then(() => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const importedSheets = workbook.SheetNames.map(name => {
-          const ws = workbook.Sheets[name];
-          const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-          if (json.length < 5) return null;
-          const studentHeader = json[4][1] || 'Alumnos';
-          const highlightColIndex = json[4].findIndex(h => h === 'Highlight');
-          const evaluations = [];
-          for (let i = 2; i < json[0].length; i += 2) {
-            if (!json[0][i]) continue;
-            const maxScore = parseFloat(json[1][i] || 0);
-            const exigency = parseFloat(json[2][i] || 0);
-            if (isNaN(maxScore) || isNaN(exigency)) continue;
-            const diffScoresRaw = String(json[3][i + 1] || '').split(',');
-            evaluations.push({
-              id: generateId(), name: String(json[0][i]), maxScore, exigency,
-              differentiatedScores: {
-                enabled: json[3][i] === 'SI',
-                green: parseFloat(diffScoresRaw[0]) || maxScore,
-                yellow: parseFloat(diffScoresRaw[1]) || maxScore,
-                blue: parseFloat(diffScoresRaw[2]) || maxScore,
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const data = new Uint8Array(e.target.result);
+      window.loadXLSX().then((XLSX) => {
+        try {
+          const workbook = XLSX.read(data, { type: 'array' });
+          const importedSheets = workbook.SheetNames.map(sheetName => {
+            const sheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+            
+            // Validar estructura básica (mínimo 5 filas de cabecera)
+            if (!json || json.length < 5) return null;
+
+            const name = sheetName;
+            
+            // 1. DETECCIÓN INTELIGENTE DE CABECERAS (Fila 4 es el estándar visual)
+            const headerRowIndex = 4; 
+            const headerRow = json[headerRowIndex];
+
+            // Buscar columna de nombres de alumnos (contiene 'Alumnos', 'Estudiantes', etc.)
+            let studentColIdx = headerRow.findIndex(c => c && String(c).match(/alumnos|nombres|estudiantes|student/i));
+            if (studentColIdx === -1) studentColIdx = 1; // Fallback a columna B si no se encuentra
+            
+            const studentHeader = headerRow[studentColIdx] || 'Alumnos';
+            const highlightColIndex = headerRow.findIndex(c => c && String(c).toLowerCase().includes('highlight'));
+
+            const evaluations = [];
+
+            // 2. DETECTAR EVALUACIONES ESCANEANDO LA FILA 0
+            // Una evaluación existe si tiene Título (fila 0) y Puntaje Máximo (fila 1) en la misma columna
+            for (let i = studentColIdx + 1; i < json[0].length; i++) {
+              const evalName = json[0][i];
+              const maxScoreVal = json[1][i];
+
+              if (!evalName || !maxScoreVal) continue; // No es el inicio de una evaluación
+
+              const maxScore = parseFloat(maxScoreVal);
+              const exigency = parseFloat(json[2][i]);
+
+              if (isNaN(maxScore) || isNaN(exigency)) continue;
+
+              // --- AQUI ESTA LA CLAVE: BUSCAR COLUMNAS POR NOMBRE ---
+              // Determinamos el rango de búsqueda para esta evaluación (desde esta columna hasta la siguiente evaluación)
+              let limit = json[0].length;
+              for (let k = i + 1; k < json[0].length; k++) {
+                if (json[0][k] && json[1][k]) { // Encontramos la siguiente evaluación
+                  limit = k;
+                  break;
+                }
               }
-            });
-          }
-          if (evaluations.length === 0) return null;
-          const studentData = json.slice(5).map(r => {
-            if (!r[1]) return null;
+
+              // Buscamos "Puntaje" y "Offset" dentro del rango de esta evaluación
+              let scoreIdx = -1;
+              let offsetIdx = -1;
+
+              for (let c = i; c < limit; c++) {
+                const header = String(headerRow[c] || '').trim().toLowerCase();
+                if (header === 'puntaje') scoreIdx = c;
+                if (header === 'offset') offsetIdx = c;
+              }
+
+              // Si no dice explícitamente "Puntaje", asumimos que es la primera columna del bloque
+              if (scoreIdx === -1) scoreIdx = i;
+
+              const diffScoresRaw = String(json[3][i + 1] || '').split(',');
+
+              evaluations.push({
+                id: generateId(),
+                name: String(evalName),
+                maxScore,
+                exigency,
+                differentiatedScores: {
+                  enabled: json[3][i] === 'SI',
+                  green: parseFloat(diffScoresRaw[0]) || maxScore,
+                  yellow: parseFloat(diffScoresRaw[1]) || maxScore,
+                  blue: parseFloat(diffScoresRaw[2]) || maxScore,
+                },
+                // Guardamos temporalmente los índices detectados para usarlos al leer alumnos
+                _readIndices: { score: scoreIdx, offset: offsetIdx }
+              });
+            }
+
+            if (evaluations.length === 0) return null;
+
+            // 3. LEER DATOS DE ALUMNOS USANDO LOS ÍNDICES DETECTADOS
+            const studentData = json.slice(5).map(r => {
+              if (!r[studentColIdx]) return null; // Fila vacía o sin nombre
+
+              return {
+                id: generateId(),
+                name: String(r[studentColIdx]),
+                // Mapear puntajes usando el índice específico detectado para cada evaluación
+                scores: evaluations.map(ev => {
+                  const idx = ev._readIndices.score;
+                  return (idx !== -1) ? String(r[idx] || '') : '';
+                }),
+                // Mapear offsets usando el índice específico detectado (o vacío si no existe)
+                offsets: evaluations.map(ev => {
+                  const idx = ev._readIndices.offset;
+                  return (idx !== -1) ? String(r[idx] || '') : '';
+                }),
+                highlight: highlightColIndex !== -1 ? (r[highlightColIndex] || null) : null
+              };
+            }).filter(Boolean);
+            
+            // Limpieza: eliminar propiedades temporales
+            evaluations.forEach(ev => delete ev._readIndices);
+
+            if (studentData.length === 0) return null;
+
             return {
-              id: generateId(), name: String(r[1]),
-              scores: evaluations.map((_, j) => String(r[2 + j * 2] || '')),
-              highlight: highlightColIndex !== -1 ? (r[highlightColIndex] || null) : null
+              id: generateId(),
+              name,
+              studentHeader,
+              evaluations,
+              studentData,
+              studentColumnWidth: 200
             };
           }).filter(Boolean);
-          if (studentData.length === 0) return null;
-          return { id: generateId(), name, studentHeader, evaluations, studentData, studentColumnWidth: 200 };
-        }).filter(Boolean);
 
-        if (importedSheets.length === 0) {
-          alert('No se encontraron datos válidos en el archivo Excel.');
-          return;
+          if (importedSheets.length === 0) {
+            alert('No se encontraron datos válidos en el archivo Excel.');
+            return;
+          }
+
+          setPendingImport(importedSheets);
+        } catch (err) {
+          console.error("Error importing file:", err);
+          alert("Hubo un error al procesar el archivo. Verifique el formato.");
         }
-        setPendingImport(importedSheets);
-      } catch (err) {
-        console.error("Error importing file:", err);
-        alert("Hubo un error al procesar el archivo. Asegúrese de que tenga el formato correcto.");
-      }
+      });
     };
     reader.readAsArrayBuffer(file);
-    });
   }, []);
 
   const handleConfirmReplace = () => {
