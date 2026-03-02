@@ -1438,6 +1438,7 @@
       const [shareDisabled, setShareDisabled] = React.useState(false);
       const [loadCodeOpen, setLoadCodeOpen] = React.useState(false);
       const [loadCodeInput, setLoadCodeInput] = React.useState('');
+      const [isReceiving, setIsReceiving] = React.useState(false);
 
       const undoStackRef = React.useRef([]);
       const redoStackRef = React.useRef([]);
@@ -1457,7 +1458,10 @@
         }
       }, [globalSettings.darkMode]);
 
+      const isSyncingRef = React.useRef(false);
+
       React.useEffect(() => {
+        if (isSyncingRef.current) return; // Prevent local save trigger if data just came from Firebase
         setIsSaving(true);
         const t = setTimeout(() => {
           saveStateToLocalStorage({ sheets, activeSheetId, globalSettings });
@@ -1619,13 +1623,14 @@
 
       React.useEffect(() => {
         if (!syncCode || !window.__FIREBASE_OK__) return;
+        if (isSyncingRef.current) return; // Only push to remote if the change originated locally
         const timer = setTimeout(() => {
           const payload = JSON.stringify({ sheets, activeSheetId, globalSettings });
           window.__FB_DB__.collection('sync').doc(syncCode).update({
             data: payload,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
           }).catch(e => console.error("Error al actualizar sync:", e));
-        }, 1000);
+        }, 2000);
 
         return () => clearTimeout(timer);
       }, [sheets, activeSheetId, globalSettings, syncCode]);
@@ -1636,15 +1641,25 @@
         const unsubscribe = window.__FB_DB__.collection('sync').doc(syncCode)
           .onSnapshot((doc) => {
             if (doc.exists) {
+              // Si el snapshot fue originado por un guardado nuestro, lo ignoramos para no bloquear la pantalla
+              if (doc.metadata.hasPendingWrites) return;
+
               const remoteData = doc.data().data;
               const localData = JSON.stringify({ sheets, activeSheetId, globalSettings });
 
               if (remoteData !== localData) {
+                isSyncingRef.current = true; // Block local save and remote push
+                setIsReceiving(true);
                 const parsed = JSON.parse(remoteData);
                 setSheets(parsed.sheets || []);
                 setActiveSheetId(parsed.activeSheetId || null);
                 if (parsed.globalSettings) setGlobalSettings(parsed.globalSettings);
-                setLastSaved(new Date());
+
+                // Allow user changes to resume after the state update cycle completes
+                setTimeout(() => {
+                  isSyncingRef.current = false;
+                  setIsReceiving(false);
+                }, 250); // Overlay lasts a quarter of a second to guarantee flush
               }
             }
           });
@@ -1724,6 +1739,15 @@
               onConfirmAdd={handleConfirmAdd}
               onCancel={() => setPendingImport(null)}
             />
+          )}
+          {isReceiving && (
+            <div className="fixed inset-0 z-[9999] bg-black/40 backdrop-blur-sm flex items-center justify-center pointer-events-auto">
+              <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl flex flex-col items-center">
+                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Sincronizando...</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Recibiendo cambios remotos</p>
+              </div>
+            </div>
           )}
           <Header
             activeSheet={activeSheet}
