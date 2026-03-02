@@ -624,7 +624,8 @@
       onOpenLoadByCode,
       shareDisabled,
       syncCode,
-      onStopSync
+      onStopSync,
+      onOpenInfo
     }) => {
       const [importOpen, setImportOpen] = React.useState(false);
       const [menuOpen, setMenuOpen] = React.useState(false);
@@ -659,6 +660,14 @@
         <header className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b-2 border-[var(--border)] bg-[var(--card)] px-4 py-4 rounded-lg shadow-sm">
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-bold text-[var(--fg)]">Calculadora de Notas</h1>
+            <Button
+              aria-label="Información y Ayuda"
+              onClick={onOpenInfo}
+              variant="ghost"
+              className="px-2 py-1 text-lg rounded-full"
+            >
+              ℹ️
+            </Button>
             <Button
               id="settings-btn"
               onClick={onToggleSettings}
@@ -1439,6 +1448,7 @@
       const [loadCodeOpen, setLoadCodeOpen] = React.useState(false);
       const [loadCodeInput, setLoadCodeInput] = React.useState('');
       const [isReceiving, setIsReceiving] = React.useState(false);
+      const [infoOpen, setInfoOpen] = React.useState(false);
 
       const undoStackRef = React.useRef([]);
       const redoStackRef = React.useRef([]);
@@ -1764,7 +1774,53 @@
             shareDisabled={shareDisabled}
             syncCode={syncCode}
             onStopSync={handleStopSync}
+            onOpenInfo={() => setInfoOpen(true)}
           />
+
+          <Modal open={infoOpen} onClose={() => setInfoOpen(false)} title="📖 Guía Rápida de Uso" maxWidth="600px">
+            <div className="space-y-4 text-sm text-[var(--fg)]">
+              <p>Esta calculadora está diseñada para ser rápida y manejable solo con el teclado. Aquí tienes sus principales funciones:</p>
+
+              <div>
+                <h4 className="font-semibold text-blue-600 dark:text-blue-400">Navegación Fluida</h4>
+                <ul className="list-disc pl-5 mt-1 text-[var(--muted)]">
+                  <li>Usa las <strong>flechas del teclado</strong> (←, ↑, →, ↓) para moverte libremente entre las notas sin usar el ratón.</li>
+                  <li>Presiona <strong>Enter</strong> o <strong>Abajo</strong> para ir al siguiente alumno.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-blue-600 dark:text-blue-400">Funciones Clave</h4>
+                <ul className="list-disc pl-5 mt-1 text-[var(--muted)]">
+                  <li><strong>Doble clic</strong> sobre una nota final (color rojo/azul) para sumar o restar décimas manualmente al promedio final.</li>
+                  <li>Despliega "Configuración ⚙️" para ajustar las notas máximas, mínimas de aprobación y el modo oscuro.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-blue-600 dark:text-blue-400">Atajos de Teclado Avanzados</h4>
+                <ul className="list-disc pl-5 mt-1 text-[var(--muted)]">
+                  <li><strong>Ctrl + Z</strong>: Deshacer cambio de nota.</li>
+                  <li><strong>Ctrl + Y</strong> / <strong>Ctrl + Shift + Z</strong>: Rehacer cambio.</li>
+                  <li><strong>Ctrl + Shift + A</strong>: Añadir alumno rápidamente.</li>
+                  <li><strong>Ctrl + Shift + E</strong>: Añadir nueva evaluación.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-blue-600 dark:text-blue-400">Sincronización (Nube)</h4>
+                <ul className="list-disc pl-5 mt-1 text-[var(--muted)]">
+                  <li>En el menú <strong>Exportar / Compartir</strong> puedes "Generar código".</li>
+                  <li>Ese código de 6 dígitos permite a otros abrir tu misma tabla en tiempo real desde <strong>Importar ▾ &rarr; Seleccionar Código</strong>.</li>
+                  <li>La pantalla negra de bloqueo evita editar mientras se reciben los datos remotos para que no se borre el trabajo de la otra persona temporalmente.</li>
+                </ul>
+              </div>
+
+              <div className="flex justify-end pt-4 mt-2 border-t border-[var(--border)]">
+                <Button variant="primary" onClick={() => setInfoOpen(false)}>Entendido</Button>
+              </div>
+            </div>
+          </Modal>
 
           <Modal open={loadCodeOpen} onClose={() => setLoadCodeOpen(false)} title="Cargar desde la Nube">
             <p className="text-sm text-[var(--muted)] mb-3">Introduce el código de 6 caracteres que te compartieron.</p>
