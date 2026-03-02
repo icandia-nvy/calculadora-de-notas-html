@@ -1726,10 +1726,18 @@
               const localData = JSON.stringify({ sheets, activeSheetId, globalSettings });
 
               if (remoteData !== localData) {
-                // Si estamos en un conflicto sin resolver, no procesamos nuevos snapshots en segundo plano
-                if (!syncConflict) {
-                  processFirebaseData(remoteData, syncCode);
-                }
+                // Durante una sesión ACTIVA normal, aplicamos silenciosamente los datos que llegan (ej. la otra persona escribió)
+                isSyncingRef.current = true; // Block local save and remote push
+
+                const parsed = JSON.parse(remoteData);
+                setSheets(parsed.sheets || []);
+                setActiveSheetId(parsed.activeSheetId || null);
+                if (parsed.globalSettings) setGlobalSettings(parsed.globalSettings);
+
+                // Allow user changes to resume after the state update cycle completes
+                setTimeout(() => {
+                  isSyncingRef.current = false;
+                }, 250); // Lock lasts a quarter of a second to guarantee flush
               }
             }
           });
