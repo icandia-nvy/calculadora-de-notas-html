@@ -28,9 +28,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
 
   <script>
     window.loadXLSX = function () {
@@ -1410,7 +1410,8 @@
     const defaultState = {
       sheets: [],
       activeSheetId: null,
-      globalSettings: { minGrade: 1.0, passingGrade: 4.0, maxGrade: 7.0, showAdvanced: false, darkMode: false }
+      globalSettings: { minGrade: 1.0, passingGrade: 4.0, maxGrade: 7.0, showAdvanced: false, darkMode: false },
+      syncCode: null
     };
 
     const getInitialState = () => {
@@ -1428,7 +1429,8 @@
           ...defaultState.globalSettings,
           ...(loaded.globalSettings || {}),
           darkMode: currentDomTheme // Sincronización forzada
-        }
+        },
+        syncCode: loaded.syncCode || null
       };
     };
 
@@ -1443,12 +1445,15 @@
       const [lastSaved, setLastSaved] = React.useState(null);
       const [settingsOpen, setSettingsOpen] = React.useState(false);
 
-      const [syncCode, setSyncCode] = React.useState(null);
+      const [syncCode, setSyncCode] = React.useState(initial.syncCode);
       const [shareDisabled, setShareDisabled] = React.useState(false);
       const [loadCodeOpen, setLoadCodeOpen] = React.useState(false);
       const [loadCodeInput, setLoadCodeInput] = React.useState('');
       const [isReceiving, setIsReceiving] = React.useState(false);
       const [infoOpen, setInfoOpen] = React.useState(false);
+
+      // Structure: { remoteData: "json_string", code: "CODE" }
+      const [syncConflict, setSyncConflict] = React.useState(null);
 
       const undoStackRef = React.useRef([]);
       const redoStackRef = React.useRef([]);
@@ -1474,12 +1479,12 @@
         if (isSyncingRef.current) return; // Prevent local save trigger if data just came from Firebase
         setIsSaving(true);
         const t = setTimeout(() => {
-          saveStateToLocalStorage({ sheets, activeSheetId, globalSettings });
+          saveStateToLocalStorage({ sheets, activeSheetId, globalSettings, syncCode });
           setIsSaving(false);
           setLastSaved(new Date());
         }, 500);
         return () => clearTimeout(t);
-      }, [sheets, activeSheetId, globalSettings]);
+      }, [sheets, activeSheetId, globalSettings, syncCode]);
 
       const activeSheet = React.useMemo(
         () => sheets.find(s => s.id === activeSheetId) || null,
@@ -1600,6 +1605,19 @@
         }
       };
 
+      const processFirebaseData = (remoteDataPayload, code) => {
+        const localData = JSON.stringify({ sheets, activeSheetId, globalSettings });
+        if (remoteDataPayload !== localData) {
+          // Si hay una diferencia entre Nube y Local, interrumpimos el flujo y preguntamos
+          setSyncConflict({ remoteData: remoteDataPayload, code });
+        } else {
+          setSyncCode(code);
+          setLoadCodeOpen(false);
+          setLoadCodeInput('');
+          alert("✅ Sesión validada. Sincronización reanudada.");
+        }
+      };
+
       const handleLoadByCode = async () => {
         if (!window.__FIREBASE_OK__) return;
         const code = loadCodeInput.trim().toUpperCase();
@@ -1608,21 +1626,71 @@
         try {
           const doc = await window.__FB_DB__.collection('sync').doc(code).get();
           if (doc.exists) {
-            const parsed = JSON.parse(doc.data().data);
-            setSheets(parsed.sheets || []);
-            setActiveSheetId(parsed.activeSheetId || null);
-            if (parsed.globalSettings) setGlobalSettings(parsed.globalSettings);
-
-            setSyncCode(code);
-            setLoadCodeOpen(false);
-            setLoadCodeInput('');
-            alert("✅ Datos cargados correctamente. Ahora estás sincronizado.");
+            processFirebaseData(doc.data().data, code);
           } else {
             alert("❌ El código no existe o expiró.");
           }
         } catch (error) {
           console.error("Error al cargar:", error);
           alert("Error al intentar cargar el código.");
+        }
+      };
+
+      // Efecto inicial: tratar de conectar si existía un código persistido
+      React.useEffect(() => {
+        if (initial.syncCode && window.__FIREBASE_OK__) {
+          window.__FB_DB__.collection('sync').doc(initial.syncCode).get().then(doc => {
+            if (doc.exists) {
+              const remoteDataPayload = doc.data().data;
+              const localDataPayload = JSON.stringify({
+                sheets: initial.sheets,
+                activeSheetId: initial.activeSheetId,
+                globalSettings: initial.globalSettings
+              });
+
+              if (remoteDataPayload !== localDataPayload) {
+                setSyncConflict({ remoteData: remoteDataPayload, code: initial.syncCode });
+              } else {
+                setSyncCode(initial.syncCode);
+                console.log("Sesión validada silenciosamente.");
+              }
+            }
+            else setSyncCode(null); // Borrar código expirado
+          }).catch(console.error);
+        }
+      }, []);
+
+      const handleConflictResolve = (choice) => {
+        if (!syncConflict) return;
+        const { remoteData, code } = syncConflict;
+
+        setSyncCode(code);
+        setSyncConflict(null);
+        setLoadCodeOpen(false);
+        setLoadCodeInput('');
+
+        if (choice === 'cloud') {
+          // Reemplazar local con Nube
+          isSyncingRef.current = true;
+          setIsReceiving(true);
+          const parsed = JSON.parse(remoteData);
+          setSheets(parsed.sheets || []);
+          setActiveSheetId(parsed.activeSheetId || null);
+          if (parsed.globalSettings) setGlobalSettings(parsed.globalSettings);
+          setTimeout(() => {
+            isSyncingRef.current = false;
+            setIsReceiving(false);
+            alert("✅ Datos cargados correctamente. Ahora estás sincronizado con la Nube.");
+          }, 250);
+        } else if (choice === 'local') {
+          // Forzar empujar la versión Local a la Nube de inmediato
+          const payload = JSON.stringify({ sheets, activeSheetId, globalSettings });
+          window.__FB_DB__.collection('sync').doc(code).update({
+            data: payload,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          }).then(() => {
+            alert("✅ Datos locales empujados a la Nube. Sincronización forzada exitosa.");
+          }).catch(e => console.error("Error al forzar sync:", e));
         }
       };
 
@@ -1658,18 +1726,10 @@
               const localData = JSON.stringify({ sheets, activeSheetId, globalSettings });
 
               if (remoteData !== localData) {
-                isSyncingRef.current = true; // Block local save and remote push
-                setIsReceiving(true);
-                const parsed = JSON.parse(remoteData);
-                setSheets(parsed.sheets || []);
-                setActiveSheetId(parsed.activeSheetId || null);
-                if (parsed.globalSettings) setGlobalSettings(parsed.globalSettings);
-
-                // Allow user changes to resume after the state update cycle completes
-                setTimeout(() => {
-                  isSyncingRef.current = false;
-                  setIsReceiving(false);
-                }, 250); // Overlay lasts a quarter of a second to guarantee flush
+                // Si estamos en un conflicto sin resolver, no procesamos nuevos snapshots en segundo plano
+                if (!syncConflict) {
+                  processFirebaseData(remoteData, syncCode);
+                }
               }
             }
           });
@@ -1759,6 +1819,27 @@
               </div>
             </div>
           )}
+          {syncConflict && (
+            <Modal open={true} onClose={() => { }} title="⚠️ Conflicto de Sincronización" maxWidth="500px">
+              <div className="space-y-4 text-sm text-[var(--fg)]">
+                <p>
+                  Tus datos locales son diferentes a los datos guardados en la nube bajo el código <strong>{syncConflict.code}</strong>.
+                </p>
+                <p className="text-[var(--muted)]">
+                  ¿Qué versión deseas conservar? (La otra se sobrescribirá irreversiblemente)
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 mt-4 pt-4 border-t border-[var(--border)]">
+                  <Button variant="danger" className="flex-1 whitespace-normal" onClick={() => handleConflictResolve('local')}>
+                    <strong>Conservar Local</strong><br /><span className="text-xs opacity-90">Sobrescribir datos en la nube</span>
+                  </Button>
+                  <Button variant="primary" className="flex-1 whitespace-normal" onClick={() => handleConflictResolve('cloud')}>
+                    <strong>Cargar de la Nube</strong><br /><span className="text-xs opacity-90">Sobrescribir datos locales</span>
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+          )}
+
           <Header
             activeSheet={activeSheet}
             onAddEvaluation={handleAddEvaluation}
