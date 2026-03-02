@@ -1,98 +1,62 @@
-# 📊 Calculadora de Notas Avanzada (HTML + React)
+# Calculadora de Notas Profesional 📊
 
-Aplicación web **completa y autocontenida en un solo archivo HTML** para la gestión avanzada de evaluaciones académicas. Está pensada para uso docente real y permite **calcular, importar, exportar y analizar notas** de forma flexible, visual e interactiva, sin requerir backend ni instalación.
+Una aplicación web interactiva desarrollada con **React** y **Tailwind CSS** para que profesores y estudiantes calculen promedios de notas. Permite importar/exportar desde Excel, usar atajos de teclado, manejar puntajes diferenciados y sincronizar el progreso en tiempo real con otros usuarios mediante Firebase.
 
-La aplicación funciona 100% en el navegador y está construida con **React (CDN)**, **Tailwind CSS** y **XLSX.js**.
+## 🚀 Características Principales
 
----
-
-## ✨ Características principales
-
-- 📁 **Gestión de múltiples hojas** (cursos, secciones o asignaturas)
-- 👩‍🎓 **Administración de alumnos** por hoja
-- 🧪 **Gestión de evaluaciones** con:
-  - puntaje máximo configurable
-  - exigencia (%) configurable
-  - notas diferenciadas por categoría (highlight)
-- ➕ **Soporte de offsets** por evaluación
-- 🧮 **Cálculo automático de notas y promedios finales**
-- ⌨️ **Atajos de teclado** para acciones frecuentes
-- 🔁 **Deshacer / Rehacer (Undo / Redo)**
-- 📥 **Importación desde Excel (.xlsx)** con detección inteligente de columnas
-- 📤 **Exportación a Excel** compatible con el formato de importación
-- 💾 **Persistencia automática local** mediante `localStorage`
-- 🌙 **Modo oscuro**
-- ⚙️ **Configuración global de escala de notas**
-- 🎨 **Interfaz moderna, responsive y clara** (Tailwind CSS)
+- **Tablas y Hojas Múltiples:** Administra distintos cursos en pestañas separadas.
+- **Importación/Exportación Excel:** Carga tus propias plantillas masivas o descarga los reportes finales al instante.
+- **Atajos de Teclado Avanzados:** Múltiples funcionalidades para una carga de notas ultrarrápida (flechas direccionales, `Ctrl + Z`, `Ctrl + A`).
+- **Evaluaciones Diferenciadas:** Permite establecer puntajes distintos para los estudiantes según su destaque (códigos de colores).
+- **Sincronización en la Nube:** (Novedad V2) Genera un código de 6 dígitos que permite colaborar a otros profesores simultáneamente.
+- **Modo Oscuro/Claro:** Completamente adaptado para proteger tu vista visual.
 
 ---
 
-## 🧩 Tecnologías utilizadas
+## 📦 Instalación y Uso
 
-- **HTML5** (archivo único)
-- **React + ReactDOM** (CDN)
-- **Tailwind CSS**
-- **XLSX.js (SheetJS)** para lectura/escritura de Excel
-- **Babel (runtime)** para JSX
-- **localStorage** para persistencia de datos
+Esta aplicación es 100% de lado del cliente y no requiere de un servidor, `npm` o herramientas complejas. Puedes usarla ejecutándola directamente.
 
----
-
-## 🚀 Uso
-
-1. Descarga el archivo `index.html`
-2. Ábrelo directamente en cualquier navegador moderno (Chrome, Edge, Firefox)
-3. Importa un archivo Excel o crea una hoja manualmente
-4. Agrega alumnos y evaluaciones
-5. Calcula notas y promedios automáticamente
-6. Exporta los resultados a Excel cuando lo necesites
-
-> No requiere servidor, instalación ni conexión a internet (salvo para los CDN).
+1. Descarga el repositorio o presiona el botón *Code -> Download ZIP*.
+2. Descomprime la carpeta en tu equipo.
+3. Abre el archivo `index V2.html` haciendo doble clic sobre él con cualquier navegador moderno (Google Chrome, Firefox, Edge).
 
 ---
 
-## 📥 Importación desde Excel
+## ⚙️ Configurar Firebase (Opcional - Sincronización)
 
-La aplicación soporta un formato estructurado que permite:
+Si deseas alojar la página o utilizar el botón de **Generar código / Cargar desde la nube**, deberás proveer tus propias credenciales en la línea `116` del archivo `index V2.html`.
 
-- múltiples evaluaciones por hoja
-- columnas de **Puntaje**, **Nota** y **Offset**
-- exigencia y puntaje máximo por evaluación
-- diferenciación por categoría (highlight)
-
-Se recomienda **exportar un archivo desde la aplicación** para usarlo como plantilla base de importación.
-
----
-
-## ⌨️ Atajos de teclado
-
-- **Ctrl / Cmd + Shift + A** → Agregar alumno
-- **Ctrl / Cmd + Shift + E** → Agregar evaluación
-- **Ctrl / Cmd + Z** → Deshacer
-- **Ctrl / Cmd + Shift + Z** o **Ctrl / Cmd + Y** → Rehacer
+```javascript
+window.__FIREBASE_CONFIG__ = {
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.firebasestorage.app",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef"
+};
+```
+Puedes seguir la guía paso a paso en el archivo `firebase_setup_instructions.md` adjunto para crear la base de datos de manera gratuita.
 
 ---
 
-## 🎯 Objetivo del proyecto
+## ⌨️ Atajos de Teclado Útiles
 
-Este proyecto busca ofrecer una **herramienta práctica, flexible y robusta para docentes**, combinando:
-
-- rigor en el cálculo académico
-- compatibilidad con Excel
-- buena experiencia de usuario
-- cero dependencia de backend
-
-Es ideal para contextos educativos donde se requiere rapidez, portabilidad y control total de los datos.
-
----
-
-## 📄 Licencia
-
-Este proyecto puede publicarse bajo licencia **MIT** u otra licencia de uso educativo, según se defina.
+| Comando | Acción |
+|---|---|
+| `Ctrl + Z` | Deshacer (*Undo*) |
+| `Ctrl + Y` / `Ctrl + Shift + Z` | Rehacer (*Redo*) |
+| `Ctrl + Shift + A` | Agregar nuevo estudiante al final de la lista |
+| `Ctrl + Shift + E` | Agregar nueva columna de evaluación al final |
+| `Flechas Direccionales` | Navegar fluidamente por las casillas de notas |
 
 ---
 
-## 🙌 Contribuciones
+## 🛠️ Tecnologías Utilizadas
 
-Las sugerencias y mejoras son bienvenidas. Este proyecto está pensado como una base sólida y extensible para herramientas educativas basadas en la web.
-
+- **HTML5**, **Vanilla JS** (ES6+)
+- **React** (cargado via CDN)
+- **TailwindCSS** (Styling)
+- **Firebase Firestore** (Sync en Tiempo Real & DB)
+- **SheetJS** (XLSX parsing)
