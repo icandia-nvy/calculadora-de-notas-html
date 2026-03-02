@@ -25,7 +25,7 @@ Esta aplicación es 100% de lado del cliente y no requiere de un servidor, `npm`
 
 ## ⚙️ Configurar Firebase (Opcional - Sincronización)
 
-Si deseas alojar la página o utilizar el botón de **Generar código / Cargar desde la nube**, deberás proveer tus propias credenciales en la línea `116` del archivo `index V2.html`.
+Si deseas alojar la página o utilizar el botón de **Generar código / Cargar desde la nube**, deberás proveer tus propias credenciales en la línea `116` del archivo `index.html`.
 
 ```javascript
 window.__FIREBASE_CONFIG__ = {
