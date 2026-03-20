@@ -1445,7 +1445,8 @@
       const [lastSaved, setLastSaved] = React.useState(null);
       const [settingsOpen, setSettingsOpen] = React.useState(false);
 
-      const [syncCode, setSyncCode] = React.useState(initial.syncCode);
+      // CORRECCIÓN VITAL: No cargar activamente el syncCode guardado sin validarlo antes
+      const [syncCode, setSyncCode] = React.useState(null);
       const [shareDisabled, setShareDisabled] = React.useState(false);
       const [loadCodeOpen, setLoadCodeOpen] = React.useState(false);
       const [loadCodeInput, setLoadCodeInput] = React.useState('');
@@ -1702,7 +1703,10 @@
       React.useEffect(() => {
         if (!syncCode || !window.__FIREBASE_OK__) return;
         if (isSyncingRef.current) return; // Only push to remote if the change originated locally
+        if (syncConflict) return; // CORRECCIÓN VITAL: Bloquear guardado remoto si hay un conflicto activo
+        
         const timer = setTimeout(() => {
+          if (syncConflict) return;
           const payload = JSON.stringify({ sheets, activeSheetId, globalSettings });
           window.__FB_DB__.collection('sync').doc(syncCode).update({
             data: payload,
@@ -1711,7 +1715,7 @@
         }, 2000);
 
         return () => clearTimeout(timer);
-      }, [sheets, activeSheetId, globalSettings, syncCode]);
+      }, [sheets, activeSheetId, globalSettings, syncCode, syncConflict]);
 
       React.useEffect(() => {
         if (!syncCode || !window.__FIREBASE_OK__) return;
