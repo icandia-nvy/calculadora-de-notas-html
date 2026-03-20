@@ -1434,6 +1434,111 @@
       };
     };
 
+    // --- ADAPTERS FOR FIREBASE COLLABORATIVE SYNC ---
+    const convertToFbMaps = (state) => {
+      const fbSheets = {};
+      const sheetOrder = [];
+      (state.sheets || []).forEach(s => {
+        sheetOrder.push(s.id);
+        const evalOrder = [];
+        const evalsMap = {};
+        (s.evaluations || []).forEach(ev => {
+          evalOrder.push(ev.id);
+          evalsMap[ev.id] = { ...ev };
+        });
+
+        const studentOrder = [];
+        const studentMap = {};
+        (s.studentData || []).forEach(st => {
+          studentOrder.push(st.id);
+          const scoresMap = {};
+          const offsetsMap = {};
+          s.evaluations.forEach((ev, i) => {
+            scoresMap[ev.id] = st.scores[i] ?? '';
+            offsetsMap[ev.id] = st.offsets ? st.offsets[i] ?? '' : '';
+          });
+          studentMap[st.id] = {
+            name: st.name,
+            highlight: st.highlight || null,
+            scores: scoresMap,
+            offsets: offsetsMap
+          };
+        });
+
+        fbSheets[s.id] = {
+          name: s.name,
+          studentHeader: s.studentHeader,
+          studentColumnWidth: s.studentColumnWidth || 200,
+          evalOrder,
+          evaluations: evalsMap,
+          studentOrder,
+          studentData: studentMap
+        };
+      });
+
+      return {
+        activeSheetId: state.activeSheetId || null,
+        globalSettings: state.globalSettings || {},
+        sheetOrder,
+        sheets: fbSheets
+      };
+    };
+
+    const convertToLocalState = (fbData) => {
+      if (!fbData) return { sheets: [], activeSheetId: null, globalSettings: {} };
+      const localSheets = (fbData.sheetOrder || []).map(sId => {
+        const s = fbData.sheets[sId];
+        if (!s) return null;
+        const evals = (s.evalOrder || []).map(eId => s.evaluations[eId] ? { id: eId, ...s.evaluations[eId] } : null).filter(Boolean);
+        const students = (s.studentOrder || []).map(stId => {
+          const st = s.studentData[stId];
+          if (!st) return null;
+          const scores = evals.map(ev => st.scores ? (st.scores[ev.id] ?? '') : '');
+          const offsets = evals.map(ev => st.offsets ? (st.offsets[ev.id] ?? '') : '');
+          return { id: stId, name: st.name, highlight: st.highlight || null, scores, offsets };
+        }).filter(Boolean);
+        return {
+          id: sId,
+          name: s.name, studentHeader: s.studentHeader, studentColumnWidth: s.studentColumnWidth || 200,
+          evaluations: evals,
+          studentData: students
+        };
+      }).filter(Boolean);
+
+      return {
+        sheets: localSheets,
+        activeSheetId: fbData.activeSheetId || null,
+        globalSettings: fbData.globalSettings || {}
+      };
+    };
+
+    const getObjectDiff = (base, object, rootPath = '') => {
+      const changes = {};
+      function walk(b, o, path) {
+        if (b === o) return;
+        if (o === null || o === undefined) {
+          if (b !== null && b !== undefined) changes[path] = firebase.firestore.FieldValue.delete();
+          return;
+        }
+        if (b === null || b === undefined) {
+          changes[path] = o;
+          return;
+        }
+        if (Array.isArray(o) && Array.isArray(b)) {
+          if (JSON.stringify(o) !== JSON.stringify(b)) changes[path] = o;
+          return;
+        }
+        if (typeof o === 'object' && typeof b === 'object') {
+          const keys = new Set([...Object.keys(o || {}), ...Object.keys(b || {})]);
+          for (let k of keys) walk(b[k], o[k], path ? `${path}.${k}` : k);
+          return;
+        }
+        changes[path] = o;
+      }
+      walk(base || {}, object || {}, rootPath);
+      return changes;
+    };
+
     const App = () => {
       const initial = React.useMemo(() => getInitialState(), []);
 
@@ -1453,11 +1558,18 @@
       const [isReceiving, setIsReceiving] = React.useState(false);
       const [infoOpen, setInfoOpen] = React.useState(false);
 
-      // Structure: { remoteData: "json_string", code: "CODE" }
+      // Structure: { remoteMap: object, code: "CODE" }
       const [syncConflict, setSyncConflict] = React.useState(null);
 
       const undoStackRef = React.useRef([]);
       const redoStackRef = React.useRef([]);
+
+      const lastFbStateRef = React.useRef(null);
+      const currentStateRef = React.useRef({ sheets, activeSheetId, globalSettings });
+
+      React.useEffect(() => {
+        currentStateRef.current = { sheets, activeSheetId, globalSettings };
+      }, [sheets, activeSheetId, globalSettings]);
 
       // Sync React State with DOM Theme + Class
       React.useEffect(() => {
@@ -1591,11 +1703,12 @@
         setShareDisabled(true);
         const code = generateSyncCode();
         try {
-          const payload = JSON.stringify({ sheets, activeSheetId, globalSettings });
+          const payloadMap = convertToFbMaps({ sheets, activeSheetId, globalSettings });
           await window.__FB_DB__.collection('sync').doc(code).set({
-            data: payload,
+            data: payloadMap,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
           });
+          lastFbStateRef.current = payloadMap;
           setSyncCode(code);
           alert(`¡Código generado exitosamente!\n\nTu código de sincronización es: ${code}\n\nCompártelo para que otros puedan ver y editar en tiempo real.`);
         } catch (error) {
@@ -1606,16 +1719,24 @@
         }
       };
 
-      const processFirebaseData = (remoteDataPayload, code) => {
-        const localData = JSON.stringify({ sheets, activeSheetId, globalSettings });
-        if (remoteDataPayload !== localData) {
-          // Si hay una diferencia entre Nube y Local, interrumpimos el flujo y preguntamos
-          setSyncConflict({ remoteData: remoteDataPayload, code });
+      const processFirebaseData = (remoteData, code) => {
+        const localDataMap = convertToFbMaps({ sheets, activeSheetId, globalSettings });
+        // Compatibilidad legacy
+        let remoteMap = typeof remoteData === 'string' ? JSON.parse(remoteData) : remoteData;
+        if (typeof remoteData === 'string') remoteMap = convertToFbMaps(remoteMap);
+
+        if (JSON.stringify(remoteMap) !== JSON.stringify(localDataMap)) {
+          setSyncConflict({ remoteMap: remoteMap, code, isLegacy: typeof remoteData === 'string' });
         } else {
+          lastFbStateRef.current = localDataMap;
           setSyncCode(code);
           setLoadCodeOpen(false);
           setLoadCodeInput('');
           alert("✅ Sesión validada. Sincronización reanudada.");
+
+          if (typeof remoteData === 'string') {
+            window.__FB_DB__.collection('sync').doc(code).update({ data: localDataMap, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }).catch(() => { });
+          }
         }
       };
 
@@ -1642,18 +1763,26 @@
         if (initial.syncCode && window.__FIREBASE_OK__) {
           window.__FB_DB__.collection('sync').doc(initial.syncCode).get().then(doc => {
             if (doc.exists) {
-              const remoteDataPayload = doc.data().data;
-              const localDataPayload = JSON.stringify({
+              const remoteData = doc.data().data;
+              let localDataMap = convertToFbMaps({
                 sheets: initial.sheets,
                 activeSheetId: initial.activeSheetId,
                 globalSettings: initial.globalSettings
               });
 
-              if (remoteDataPayload !== localDataPayload) {
-                setSyncConflict({ remoteData: remoteDataPayload, code: initial.syncCode });
+              let remoteMap = typeof remoteData === 'string' ? JSON.parse(remoteData) : remoteData;
+              if (typeof remoteData === 'string') remoteMap = convertToFbMaps(remoteMap);
+
+              if (JSON.stringify(remoteMap) !== JSON.stringify(localDataMap)) {
+                setSyncConflict({ remoteMap: remoteMap, code: initial.syncCode, isLegacy: typeof remoteData === 'string' });
               } else {
+                lastFbStateRef.current = localDataMap;
                 setSyncCode(initial.syncCode);
                 console.log("Sesión validada silenciosamente.");
+
+                if (typeof remoteData === 'string') {
+                  window.__FB_DB__.collection('sync').doc(initial.syncCode).update({ data: localDataMap, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }).catch(() => { });
+                }
               }
             }
             else setSyncCode(null); // Borrar código expirado
@@ -1663,7 +1792,7 @@
 
       const handleConflictResolve = (choice) => {
         if (!syncConflict) return;
-        const { remoteData, code } = syncConflict;
+        const { remoteMap, code, isLegacy } = syncConflict;
 
         setSyncCode(code);
         setSyncConflict(null);
@@ -1674,10 +1803,17 @@
           // Reemplazar local con Nube
           isSyncingRef.current = true;
           setIsReceiving(true);
-          const parsed = JSON.parse(remoteData);
-          setSheets(parsed.sheets || []);
-          setActiveSheetId(parsed.activeSheetId || null);
-          if (parsed.globalSettings) setGlobalSettings(parsed.globalSettings);
+
+          let newState = convertToLocalState(remoteMap);
+          lastFbStateRef.current = remoteMap;
+
+          if (isLegacy) {
+            window.__FB_DB__.collection('sync').doc(code).update({ data: remoteMap, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }).catch(() => { });
+          }
+
+          setSheets(newState.sheets || []);
+          setActiveSheetId(newState.activeSheetId || null);
+          if (newState.globalSettings) setGlobalSettings(newState.globalSettings);
           setTimeout(() => {
             isSyncingRef.current = false;
             setIsReceiving(false);
@@ -1685,11 +1821,12 @@
           }, 250);
         } else if (choice === 'local') {
           // Forzar empujar la versión Local a la Nube de inmediato
-          const payload = JSON.stringify({ sheets, activeSheetId, globalSettings });
-          window.__FB_DB__.collection('sync').doc(code).update({
-            data: payload,
+          const payloadMap = convertToFbMaps({ sheets, activeSheetId, globalSettings });
+          lastFbStateRef.current = payloadMap;
+          window.__FB_DB__.collection('sync').doc(code).set({
+            data: payloadMap,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          }).then(() => {
+          }, { merge: true }).then(() => {
             alert("✅ Datos locales empujados a la Nube. Sincronización forzada exitosa.");
           }).catch(e => console.error("Error al forzar sync:", e));
         }
@@ -1704,13 +1841,18 @@
         if (!syncCode || !window.__FIREBASE_OK__) return;
         if (isSyncingRef.current) return; // Only push to remote if the change originated locally
         if (syncConflict) return; // CORRECCIÓN VITAL: Bloquear guardado remoto si hay un conflicto activo
-        
+
         const timer = setTimeout(() => {
           if (syncConflict) return;
-          const payload = JSON.stringify({ sheets, activeSheetId, globalSettings });
-          window.__FB_DB__.collection('sync').doc(syncCode).update({
-            data: payload,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          const newFbMap = convertToFbMaps({ sheets, activeSheetId, globalSettings });
+          const diff = getObjectDiff(lastFbStateRef.current, newFbMap, 'data');
+
+          if (Object.keys(diff).length === 0) return; // Nothing changed
+
+          diff['updatedAt'] = firebase.firestore.FieldValue.serverTimestamp();
+
+          window.__FB_DB__.collection('sync').doc(syncCode).update(diff).then(() => {
+            lastFbStateRef.current = newFbMap;
           }).catch(e => console.error("Error al actualizar sync:", e));
         }, 2000);
 
@@ -1722,27 +1864,41 @@
 
         const unsubscribe = window.__FB_DB__.collection('sync').doc(syncCode)
           .onSnapshot((doc) => {
-            if (doc.exists) {
-              // Si el snapshot fue originado por un guardado nuestro, lo ignoramos para no bloquear la pantalla
-              if (doc.metadata.hasPendingWrites) return;
+            if (!doc.exists) return;
+            if (doc.metadata.hasPendingWrites) return;
 
-              const remoteData = doc.data().data;
-              const localData = JSON.stringify({ sheets, activeSheetId, globalSettings });
+            let remoteMap = doc.data().data;
+            if (!remoteMap) return;
 
-              if (remoteData !== localData) {
-                // Durante una sesión ACTIVA normal, aplicamos silenciosamente los datos que llegan (ej. la otra persona escribió)
-                isSyncingRef.current = true; // Block local save and remote push
-
-                const parsed = JSON.parse(remoteData);
+            // Handle legacy active sessions silently if someone else is on v1
+            if (typeof remoteMap === 'string') {
+              try {
+                const parsed = JSON.parse(remoteMap);
+                isSyncingRef.current = true;
                 setSheets(parsed.sheets || []);
                 setActiveSheetId(parsed.activeSheetId || null);
                 if (parsed.globalSettings) setGlobalSettings(parsed.globalSettings);
+                const converted = convertToFbMaps(parsed);
+                lastFbStateRef.current = converted;
+                setTimeout(() => { isSyncingRef.current = false; }, 250);
 
-                // Allow user changes to resume after the state update cycle completes
-                setTimeout(() => {
-                  isSyncingRef.current = false;
-                }, 250); // Lock lasts a quarter of a second to guarantee flush
-              }
+                window.__FB_DB__.collection('sync').doc(syncCode).update({ data: converted, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }).catch(() => { });
+              } catch (e) { }
+              return;
+            }
+
+            const currentMap = convertToFbMaps(currentStateRef.current);
+            if (JSON.stringify(remoteMap) !== JSON.stringify(currentMap)) {
+              isSyncingRef.current = true;
+
+              const newState = convertToLocalState(remoteMap);
+              lastFbStateRef.current = remoteMap;
+
+              setSheets(newState.sheets || []);
+              setActiveSheetId(newState.activeSheetId || null);
+              if (newState.globalSettings) setGlobalSettings(newState.globalSettings);
+
+              setTimeout(() => { isSyncingRef.current = false; }, 250);
             }
           });
 
