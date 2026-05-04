@@ -148,6 +148,7 @@
 
         input[type=number] {
             -moz-appearance: textfield;
+            appearance: textfield;
         }
 
         .resize-handle {
@@ -998,9 +999,12 @@
                 if (!globalSettings?.showAdvanced) return null;
                 const avg = [];
                 const fails = [];
+                const stdDev = [];
+                const excellents = [];
                 for (let i = 0; i < sheet.evaluations.length; i++) {
-                    let sum = 0, count = 0, fail = 0;
+                    let sum = 0, count = 0, fail = 0, excellent = 0;
                     const ev = sheet.evaluations[i];
+                    const gradesList = [];
                     for (let r = 0; r < sheet.studentData.length; r++) {
                         const st = sheet.studentData[r];
                         let maxScore = ev.maxScore;
@@ -1008,16 +1012,30 @@
                             const v = toNum(ev.differentiatedScores[st.highlight]);
                             if (!isNaN(v) && v > 0) maxScore = v;
                         }
-                        const grade = calculateGrade(toNum(st.scores[i]), toNum(maxScore), toNum(ev.exigency), globalSettings);
+                        const scoreNum = toNum(st.scores[i]);
+                        const maxScoreNum = toNum(maxScore);
+                        const grade = calculateGrade(scoreNum, maxScoreNum, toNum(ev.exigency), globalSettings);
+                        
                         if (!isNaN(grade)) {
                             sum += grade; count++;
+                            gradesList.push(grade);
                             if (grade < globalSettings.passingGrade) fail++;
+                            if (scoreNum >= (maxScoreNum * 0.9)) excellent++;
                         }
                     }
-                    avg.push(count ? (sum / count) : NaN);
+                    const average = count ? (sum / count) : NaN;
+                    avg.push(average);
                     fails.push(fail);
+                    excellents.push(excellent);
+                    
+                    if (count > 1 && !isNaN(average)) {
+                        const variance = gradesList.reduce((acc, g) => acc + Math.pow(g - average, 2), 0) / count;
+                        stdDev.push(Math.sqrt(variance));
+                    } else {
+                        stdDev.push(NaN);
+                    }
                 }
-                return { avg, fails };
+                return { avg, fails, stdDev, excellents };
             }, [globalSettings, sheet.studentData, sheet.evaluations]);
 
             const inputRefs = React.useRef({});
@@ -1263,6 +1281,14 @@
                                 <td className="p-1 w-12"></td>
                                 <td className="p-1 text-xs text-[var(--muted)]">No aprobadas</td>
                             </tr>
+                            <tr className="h-10">
+                                <td className="p-1 w-12"></td>
+                                <td className="p-1 text-xs text-[var(--muted)]">Excelentes (&gt;90%)</td>
+                            </tr>
+                            <tr className="h-10">
+                                <td className="p-1 w-12"></td>
+                                <td className="p-1 text-xs text-[var(--muted)]">Desv. Estándar (σ)</td>
+                            </tr>
                         </tfoot>
                     )}
                 </table>, studentRoot) : null;
@@ -1340,7 +1366,23 @@
                                 {sheet.evaluations.map((ev, i) => (
                                     <React.Fragment key={ev.id}>
                                         <td className="p-1 w-20"></td>
-                                        <td className="p-1 w-20 text-xs text-[var(--muted)]">No aprob.: {advancedStats.fails[i]}</td>
+                                        <td className="p-1 w-20 text-xs text-[var(--muted)] text-red-600 dark:text-red-400 font-medium">Reprob.: {advancedStats.fails[i]}</td>
+                                    </React.Fragment>
+                                ))}
+                            </tr>
+                            <tr className="h-10">
+                                {sheet.evaluations.map((ev, i) => (
+                                    <React.Fragment key={ev.id}>
+                                        <td className="p-1 w-20"></td>
+                                        <td className="p-1 w-20 text-xs text-[var(--muted)] text-green-600 dark:text-green-400 font-medium">Excel.: {advancedStats.excellents[i]}</td>
+                                    </React.Fragment>
+                                ))}
+                            </tr>
+                            <tr className="h-10">
+                                {sheet.evaluations.map((ev, i) => (
+                                    <React.Fragment key={ev.id}>
+                                        <td className="p-1 w-20 border-b border-[var(--border)]"></td>
+                                        <td className="p-1 w-20 text-xs text-[var(--muted)] border-b border-[var(--border)]">{isNaN(advancedStats.stdDev[i]) ? '—' : advancedStats.stdDev[i].toFixed(2)}</td>
                                     </React.Fragment>
                                 ))}
                             </tr>
