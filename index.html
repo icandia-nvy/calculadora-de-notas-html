@@ -7,6 +7,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark">
     <title>Calculadora de Notas</title>
+    <link rel="manifest" href="manifest.json" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Calc Notas" />
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -172,12 +176,18 @@
             opacity: 0.7;
         }
 
-        .draggable-tab {
-            cursor: grab;
-        }
-
         .draggable-tab:active {
             cursor: grabbing;
+        }
+
+        /* Ocultar barra de desplazamiento para pestañas */
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
     </style>
 
@@ -266,19 +276,19 @@
 
         const deepClone = (obj) => {
             if (typeof structuredClone === 'function') return structuredClone(obj);
-            return JSON.parse(JSON.stringify(obj)); 
+            return JSON.parse(JSON.stringify(obj));
         };
 
         const deepEquals = (a, b) => {
             if (a === b) return true;
             if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
-            
+
             if (Array.isArray(a) && Array.isArray(b)) {
                 if (a.length !== b.length) return false;
                 for (let i = 0; i < a.length; i++) if (!deepEquals(a[i], b[i])) return false;
                 return true;
             }
-            
+
             const keysA = Object.keys(a), keysB = Object.keys(b);
             if (keysA.length !== keysB.length) return false;
             for (let k of keysA) {
@@ -404,7 +414,7 @@
             };
 
             return (
-                <div ref={dropdownRef} className="absolute top-full right-0 mt-2 w-64 bg-[var(--card)] rounded-md shadow-lg z-30 p-4 border border-[var(--border)]">
+                <div ref={dropdownRef} className="absolute top-full left-0 sm:left-auto sm:right-0 mt-2 w-64 max-w-[90vw] bg-[var(--card)] rounded-md shadow-lg z-30 p-4 border border-[var(--border)]">
                     <div className="space-y-3">
                         <div>
                             <label className="block text-sm font-medium text-[var(--fg)]">Nombre</label>
@@ -682,9 +692,9 @@
             };
 
             return (
-                <header className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b-2 border-[var(--border)] bg-[var(--card)] px-4 py-4 rounded-lg shadow-sm">
-                    <div className="flex items-center gap-2">
-                        <h1 className="text-3xl font-bold text-[var(--fg)]">Calculadora de Notas</h1>
+                <header className="flex flex-col sm:flex-row flex-wrap justify-between items-start sm:items-center mb-4 sm:mb-6 pb-4 border-b-2 border-[var(--border)] bg-[var(--card)] px-2 sm:px-4 py-3 sm:py-4 rounded-lg shadow-sm gap-4">
+                    <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                        <h1 className="text-xl sm:text-3xl font-bold text-[var(--fg)]">Calculadora de Notas</h1>
                         <Button
                             aria-label="Información y Ayuda"
                             onClick={onOpenInfo}
@@ -707,15 +717,16 @@
                             {isSaving ? 'Guardando…' : `✓ Guardado${lastSaved ? ' ' + lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}`}{syncCode ? ` · Sync: ${syncCode}` : ''}{syncMessage ? ` · ${syncMessage}` : ''}
                         </span>
                     </div>
-                    <div className="flex items-center space-x-2 mt-4 sm:mt-0">
-                        <div className="relative">
+                    <div className="grid grid-cols-2 gap-2 w-full sm:w-auto sm:flex sm:items-center sm:space-x-2 mt-2 sm:mt-0">
+                        <div className="relative col-span-1">
                             <Button
                                 variant="success"
                                 aria-label="Añadir nueva evaluación"
                                 onClick={() => setAddEvalDropdownOpen(prev => !prev)}
                                 disabled={!activeSheet}
+                                className="w-full h-full text-xs sm:text-sm flex items-center justify-center p-2"
                             >
-                                Añadir Evaluación
+                                + Evaluación
                             </Button>
                             {isAddEvalDropdownOpen && <AddEvalDropdown onAdd={onAddEvaluation} onClose={() => setAddEvalDropdownOpen(false)} />}
                         </div>
@@ -724,12 +735,13 @@
                             aria-label="Añadir nuevo alumno"
                             onClick={onAddStudent}
                             disabled={!activeSheet}
+                            className="w-full h-full text-xs sm:text-sm flex items-center justify-center p-2 col-span-1"
                         >
-                            Añadir Alumno
+                            + Alumno
                         </Button>
 
-                        <div ref={importRef} className="relative inline-block">
-                            <Button variant="secondary" onClick={() => setImportOpen(v => !v)}>
+                        <div ref={importRef} className="relative inline-block col-span-1">
+                            <Button variant="secondary" onClick={() => setImportOpen(v => !v)} className="w-full h-full text-xs sm:text-sm flex items-center justify-center p-2">
                                 Importar ▾
                             </Button>
                             {importOpen && (
@@ -752,8 +764,9 @@
                                 variant="warning"
                                 onClick={() => setMenuOpen(v => !v)}
                                 disabled={sheetsCount === 0 && shareDisabled}
+                                className="w-full h-full text-xs sm:text-sm flex items-center justify-center p-2"
                             >
-                                Exportar / Compartir ▾
+                                Exportar ▾
                             </Button>
                             {menuOpen && (
                                 <div className="absolute right-0 mt-2 w-64 bg-[var(--card)] border border-[var(--border)] rounded shadow z-30">
@@ -854,7 +867,7 @@
             const handleDragEnd = () => { setDraggedIndex(null); setDragOverIndex(null); };
 
             return (
-                <div className="flex border-b border-[var(--border)]">
+                <div className="flex overflow-x-auto whitespace-nowrap scrollbar-hide border-b border-[var(--border)]">
                     {sheets.map((s, i) => (
                         <div key={s.id}
                             className={`tab flex items-center px-4 py-2 border-t border-l border-r rounded-t-lg cursor-pointer -mb-px draggable-tab transition-colors
@@ -1015,7 +1028,7 @@
                         const scoreNum = toNum(st.scores[i]);
                         const maxScoreNum = toNum(maxScore);
                         const grade = calculateGrade(scoreNum, maxScoreNum, toNum(ev.exigency), globalSettings);
-                        
+
                         if (!isNaN(grade)) {
                             sum += grade; count++;
                             gradesList.push(grade);
@@ -1027,7 +1040,7 @@
                     avg.push(average);
                     fails.push(fail);
                     excellents.push(excellent);
-                    
+
                     if (count > 1 && !isNaN(average)) {
                         const variance = gradesList.reduce((acc, g) => acc + Math.pow(g - average, 2), 0) / count;
                         stdDev.push(Math.sqrt(variance));
@@ -1039,7 +1052,7 @@
             }, [globalSettings, sheet.studentData, sheet.evaluations]);
 
             const inputRefs = React.useRef({});
-            
+
             const sheetRef = React.useRef(sheet);
             React.useEffect(() => { sheetRef.current = sheet; }, [sheet]);
 
@@ -1048,9 +1061,9 @@
 
             const [offsetOpen, setOffsetOpen] = React.useState(false);
             const [offsetTarget, setOffsetTarget] = React.useState({ r: null, e: null });
-            
+
             const onOpenOffset = React.useCallback((r, e) => { setOffsetTarget({ r, e }); setOffsetOpen(true); }, []);
-            
+
             const onApplyOffset = React.useCallback((val) => {
                 const { r, e } = offsetTarget;
                 const currentSheet = sheetRef.current;
@@ -1077,7 +1090,7 @@
             const handleScoreChange = React.useCallback((r, e, v) => {
                 const normalized = normalizeNumberInput(v);
                 if (normalized === null) return;
-                
+
                 if (!hasPushedHistoryRef.current) {
                     if (onPushHistory) onPushHistory();
                     hasPushedHistoryRef.current = true;
@@ -1103,7 +1116,7 @@
                     maxScore = parseFloat(evaluation.differentiatedScores[student.highlight]) || evaluation.maxScore;
                 }
                 if (numericScore > maxScore) numericScore = maxScore;
-                
+
                 const d = [...currentSheet.studentData];
                 d[r] = { ...d[r], scores: [...d[r].scores] };
                 d[r].scores[e] = numericScore;
@@ -1115,7 +1128,7 @@
             const handleDrop = React.useCallback((e, dropIndex) => {
                 e.preventDefault();
                 if (draggedIndex === null || draggedIndex === dropIndex) return;
-                
+
                 if (onPushHistory) onPushHistory();
 
                 const currentSheet = sheetRef.current;
@@ -1134,7 +1147,7 @@
             }, [draggedIndex, update]);
             const handleDragEnd = React.useCallback(() => { setDraggedIndex(null); setDragOverIndex(null); }, []);
 
-            const handleNameChange = React.useCallback((r, v) => { 
+            const handleNameChange = React.useCallback((r, v) => {
                 if (!hasPushedHistoryRef.current) {
                     if (onPushHistory) onPushHistory();
                     // Al no tener blur los inputs de texto, asumiremos el history por el evento de tecla
@@ -1142,7 +1155,7 @@
                     hasPushedHistoryRef.current = true;
                 }
                 const currentSheet = sheetRef.current;
-                const d = [...currentSheet.studentData]; d[r] = { ...d[r], name: v }; update({ studentData: d }); 
+                const d = [...currentSheet.studentData]; d[r] = { ...d[r], name: v }; update({ studentData: d });
             }, [update, onPushHistory]);
 
             const handleNameBlur = React.useCallback(() => {
@@ -1169,19 +1182,19 @@
                 d[index] = { ...d[index], [field]: numValue };
                 update({ evaluations: d });
             }, [update, onPushHistory]);
-            
-            const handleEvalNameChange = React.useCallback((index, value) => { 
+
+            const handleEvalNameChange = React.useCallback((index, value) => {
                 if (!hasPushedHistoryRef.current) { if (onPushHistory) onPushHistory(); hasPushedHistoryRef.current = true; }
                 const currentSheet = sheetRef.current;
-                const d = [...currentSheet.evaluations]; d[index] = { ...d[index], name: value }; update({ evaluations: d }); 
+                const d = [...currentSheet.evaluations]; d[index] = { ...d[index], name: value }; update({ evaluations: d });
             }, [update, onPushHistory]);
-            
+
             const delEval = React.useCallback((e) => {
                 if (onPushHistory) onPushHistory();
                 const currentSheet = sheetRef.current;
                 update({ evaluations: currentSheet.evaluations.filter((_, i) => i !== e), studentData: currentSheet.studentData.map(s => ({ ...s, scores: s.scores.filter((_, i) => i !== e) })) })
             }, [update, onPushHistory]);
-            
+
             const delStudent = React.useCallback((r) => {
                 if (onPushHistory) onPushHistory();
                 const currentSheet = sheetRef.current;
@@ -1254,15 +1267,17 @@
                                         <button aria-label={`Eliminar estudiante ${s.name}`} onClick={() => delStudent(r)} className="p-1 bg-[var(--card)] rounded shadow hover:bg-red-100 dark:hover:bg-red-900/30"><span className="text-red-500 font-bold">×</span></button>
                                     </div>
                                 </td>
-                                <td className="p-1 text-sm">
+                                <td className="p-0 sm:p-1 text-sm">
                                     <div className="flex items-center">
-                                        <input
-                                            type="text"
+                                        <textarea
+                                            title={s.name}
                                             disabled={s.highlight === 'red'}
                                             value={s.name}
                                             onChange={e => handleNameChange(r, e.target.value)}
                                             onBlur={handleNameBlur}
-                                            className={`w-full p-2 rounded transition-all bg-transparent text-[var(--fg)] focus:bg-[var(--hover)] ${s.highlight === 'red' ? 'line-through text-gray-500 italic cursor-not-allowed' : ''}`}
+                                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                                            rows={2}
+                                            className={`w-full p-1 sm:p-2 rounded transition-all bg-transparent text-[var(--fg)] focus:bg-[var(--hover)] resize-none overflow-hidden break-words text-xs sm:text-sm leading-tight h-10 sm:h-12 ${s.highlight === 'red' ? 'line-through text-gray-500 italic cursor-not-allowed' : ''}`}
                                         />
                                         <button aria-label="Cambiar color de resaltado" onClick={() => handleHighlight(r)} className="ml-2 text-xl text-[var(--muted)] hover:text-blue-600" title="Cambiar color">🎨</button>
                                     </div>
@@ -1523,7 +1538,7 @@
                 studentHeader: headerRow[studentCol] || 'Alumnos',
                 evaluations,
                 studentData,
-                studentColumnWidth: 200
+                studentColumnWidth: typeof window !== 'undefined' && window.innerWidth < 640 ? 120 : 200
             };
         };
 
@@ -1540,7 +1555,7 @@
 
             if (!loaded) return { ...defaultState, globalSettings: { ...defaultState.globalSettings, darkMode: currentDomTheme } };
 
-            const sheetsWithWidth = (loaded.sheets || []).map(s => ({ ...s, studentColumnWidth: s.studentColumnWidth || 200 }));
+            const sheetsWithWidth = (loaded.sheets || []).map(s => ({ ...s, studentColumnWidth: s.studentColumnWidth || (typeof window !== 'undefined' && window.innerWidth < 640 ? 120 : 200) }));
             return {
                 ...defaultState,
                 ...loaded,
@@ -1763,7 +1778,7 @@
             const handleUpdateSheet = React.useCallback(u => setSheets(p => p.map(s => s.id === u.id ? u : s)), [setSheets]);
 
             const handleCreateSheet = () => {
-                const sheet = { id: generateId(), name: `Hoja ${sheets.length + 1}`, studentHeader: 'Alumnos', evaluations: [], studentData: [], studentColumnWidth: 200 };
+                const sheet = { id: generateId(), name: `Hoja ${sheets.length + 1}`, studentHeader: 'Alumnos', evaluations: [], studentData: [], studentColumnWidth: typeof window !== 'undefined' && window.innerWidth < 640 ? 120 : 200 };
                 setSheets(p => [...p, sheet]);
                 setActiveSheetId(sheet.id);
             };
@@ -1798,7 +1813,7 @@
                     const isMac = navigator.platform.toUpperCase().includes('MAC');
                     const ctrl = isMac ? e.metaKey : e.ctrlKey;
                     if (!ctrl) return;
-                    
+
                     const active = document.activeElement;
                     const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
 
@@ -2020,7 +2035,7 @@
                         }
 
                         const currentMap = convertToFbMaps(currentStateRef.current);
-                        
+
                         // CORRECCIÓN: Si la nube tiene exactamente lo que nosotros sabíamos que tenía (lastFbStateRef),
                         // ignoramos. Si hay diferencias con currentMap, son nuestros propios tipeos locales sin subir.
                         if (lastFbStateRef.current && deepEquals(remoteMap, lastFbStateRef.current)) {
@@ -2107,7 +2122,7 @@
             };
 
             return (
-                <div className="p-4 sm:p-6 lg:p-8 min-h-screen bg-[var(--bg)] text-[var(--fg)]">
+                <div className="p-1 sm:p-4 md:p-6 lg:p-8 min-h-screen bg-[var(--bg)] text-[var(--fg)]">
                     {pendingImport && (
                         <ImportConfirmationModal
                             pending={pendingImport}
@@ -2276,6 +2291,15 @@
             ReactDOM.createRoot(rootElement).render(<App />);
         }
 
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('Service Worker registrado con éxito: ', reg.scope))
+                    .catch(err => console.log('Error al registrar Service Worker: ', err));
+            });
+        }
     </script>
 </body>
 
