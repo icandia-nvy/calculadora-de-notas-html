@@ -1506,6 +1506,24 @@
             // NUEVO: Buscar índice de columna Highlight
             const highlightColIndex = headerRow.findIndex(c => c && String(c).match(/highlight|color/i));
 
+            let minGrade = 1.0;
+            let passingGrade = 4.0;
+            let maxGrade = 7.0;
+            let studentColumnWidth = typeof window !== 'undefined' && window.innerWidth < 640 ? 120 : 200;
+
+            if (json[0] && json[0][0] && String(json[0][0]).startsWith('MinGrade:')) {
+                minGrade = parseFloat(String(json[0][0]).replace('MinGrade:', '')) || 1.0;
+            }
+            if (json[1] && json[1][0] && String(json[1][0]).startsWith('PassingGrade:')) {
+                passingGrade = parseFloat(String(json[1][0]).replace('PassingGrade:', '')) || 4.0;
+            }
+            if (json[2] && json[2][0] && String(json[2][0]).startsWith('MaxGrade:')) {
+                maxGrade = parseFloat(String(json[2][0]).replace('MaxGrade:', '')) || 7.0;
+            }
+            if (json[3] && json[3][0] && String(json[3][0]).startsWith('Width:')) {
+                studentColumnWidth = parseInt(String(json[3][0]).replace('Width:', ''), 10) || studentColumnWidth;
+            }
+
             const evaluations = [];
 
             for (let i = studentCol + 1; i < json[0].length; i++) {
@@ -1569,8 +1587,8 @@
                 studentHeader: headerRow[studentCol] || 'Alumnos',
                 evaluations,
                 studentData,
-                studentColumnWidth: typeof window !== 'undefined' && window.innerWidth < 640 ? 120 : 200,
-                settings: { minGrade: 1.0, passingGrade: 4.0, maxGrade: 7.0 }
+                studentColumnWidth,
+                settings: { minGrade, passingGrade, maxGrade }
             };
         };
 
@@ -1917,14 +1935,14 @@
                 }
             };
 
-            const processFirebaseData = (remoteData, code) => {
+            const processFirebaseData = (remoteData, code, remoteUpdatedAt) => {
                 const localDataMap = convertToFbMaps({ sheets, activeSheetId, globalSettings });
                 // Compatibilidad legacy
                 let remoteMap = typeof remoteData === 'string' ? JSON.parse(remoteData) : remoteData;
                 if (typeof remoteData === 'string') remoteMap = convertToFbMaps(remoteMap);
 
                 if (JSON.stringify(remoteMap) !== JSON.stringify(localDataMap)) {
-                    setSyncConflict({ remoteMap: remoteMap, code, isLegacy: typeof remoteData === 'string' });
+                    setSyncConflict({ remoteMap: remoteMap, code, isLegacy: typeof remoteData === 'string', remoteUpdatedAt });
                 } else {
                     lastFbStateRef.current = localDataMap;
                     setSyncCode(code);
@@ -1946,7 +1964,7 @@
                 try {
                     const doc = await window.__FB_DB__.collection('sync').doc(code).get();
                     if (doc.exists) {
-                        processFirebaseData(doc.data().data, code);
+                        processFirebaseData(doc.data().data, code, doc.data().updatedAt);
                     } else {
                         alert("❌ El código no existe o expiró.");
                     }
@@ -1961,7 +1979,9 @@
                 if (initial.syncCode && window.__FIREBASE_OK__) {
                     window.__FB_DB__.collection('sync').doc(initial.syncCode).get().then(doc => {
                         if (doc.exists) {
-                            const remoteData = doc.data().data;
+                            const data = doc.data();
+                            const remoteData = data.data;
+                            const remoteUpdatedAt = data.updatedAt;
                             let localDataMap = convertToFbMaps({
                                 sheets: initial.sheets,
                                 activeSheetId: initial.activeSheetId,
@@ -1972,7 +1992,7 @@
                             if (typeof remoteData === 'string') remoteMap = convertToFbMaps(remoteMap);
 
                             if (JSON.stringify(remoteMap) !== JSON.stringify(localDataMap)) {
-                                setSyncConflict({ remoteMap: remoteMap, code: initial.syncCode, isLegacy: typeof remoteData === 'string' });
+                                setSyncConflict({ remoteMap: remoteMap, code: initial.syncCode, isLegacy: typeof remoteData === 'string', remoteUpdatedAt });
                             } else {
                                 lastFbStateRef.current = localDataMap;
                                 setSyncCode(initial.syncCode);
@@ -2148,7 +2168,7 @@
                                 let maxScore = ev.maxScore;
                                 if (ev.differentiatedScores.enabled && st.highlight) maxScore = ev.differentiatedScores[st.highlight] || ev.maxScore;
                                 const score = parseFloat(st.scores[i]);
-                                const grade = calculateGrade(score, maxScore, ev.exigency, globalSettings);
+                                const grade = calculateGrade(score, maxScore, ev.exigency, sheet.settings);
                                 row.push(st.scores[i] ?? '', isNaN(grade) ? '' : grade.toFixed(1), (st.offsets || [])[i] ?? '');
                                 if (!isNaN(grade)) { total += grade; count++; }
                             });
@@ -2158,10 +2178,10 @@
                             return row;
                         });
                         const aoa = [
-                            ['', '', ...sheet.evaluations.flatMap(ev => [ev.name, '', ''])],
-                            ['', 'P. Máx:', ...sheet.evaluations.flatMap(ev => [ev.maxScore, '', ''])],
-                            ['', 'Exig:', ...sheet.evaluations.flatMap(ev => [ev.exigency, '', ''])],
-                            ['', 'Diferenciados', ...sheet.evaluations.flatMap(ev => [ev.differentiatedScores.enabled ? 'SI' : 'NO', `${ev.differentiatedScores.green},${ev.differentiatedScores.yellow},${ev.differentiatedScores.blue}`, ''])],
+                            ['MinGrade:' + sheet.settings.minGrade, '', ...sheet.evaluations.flatMap(ev => [ev.name, '', ''])],
+                            ['PassingGrade:' + sheet.settings.passingGrade, 'P. Máx:', ...sheet.evaluations.flatMap(ev => [ev.maxScore, '', ''])],
+                            ['MaxGrade:' + sheet.settings.maxGrade, 'Exig:', ...sheet.evaluations.flatMap(ev => [ev.exigency, '', ''])],
+                            ['Width:' + (sheet.studentColumnWidth || 200), 'Diferenciados', ...sheet.evaluations.flatMap(ev => [ev.differentiatedScores.enabled ? 'SI' : 'NO', `${ev.differentiatedScores.green},${ev.differentiatedScores.yellow},${ev.differentiatedScores.blue}`, ''])],
                             ['#', sheet.studentHeader, ...sheet.evaluations.flatMap(() => ['Puntaje', 'Nota', 'Offset']), 'Promedio Final', 'Highlight'],
                             ...rows
                         ];
@@ -2202,11 +2222,15 @@
                                     ¿Qué versión deseas conservar? (La otra se sobrescribirá irreversiblemente)
                                 </p>
                                 <div className="flex flex-col sm:flex-row gap-3 mt-4 pt-4 border-t border-[var(--border)]">
-                                    <Button variant="danger" className="flex-1 whitespace-normal" onClick={() => handleConflictResolve('local')}>
-                                        <strong>Conservar Local</strong><br /><span className="text-xs opacity-90">Sobrescribir datos en la nube</span>
+                                    <Button variant="danger" className="flex-1 whitespace-normal text-left sm:text-center px-4 py-3" onClick={() => handleConflictResolve('local')}>
+                                        <div className="font-bold text-base mb-1">Conservar Local</div>
+                                        {lastSaved && <div className="text-xs opacity-90 mb-1">Modificado: {lastSaved.toLocaleString()}</div>}
+                                        <div className="text-xs opacity-75">Sobrescribirá la nube</div>
                                     </Button>
-                                    <Button variant="primary" className="flex-1 whitespace-normal" onClick={() => handleConflictResolve('cloud')}>
-                                        <strong>Cargar de la Nube</strong><br /><span className="text-xs opacity-90">Sobrescribir datos locales</span>
+                                    <Button variant="primary" className="flex-1 whitespace-normal text-left sm:text-center px-4 py-3" onClick={() => handleConflictResolve('cloud')}>
+                                        <div className="font-bold text-base mb-1">Cargar de la Nube</div>
+                                        {syncConflict.remoteUpdatedAt && <div className="text-xs opacity-90 mb-1">Modificado: {syncConflict.remoteUpdatedAt.toDate().toLocaleString()}</div>}
+                                        <div className="text-xs opacity-75">Sobrescribirá datos locales</div>
                                     </Button>
                                 </div>
                             </div>
