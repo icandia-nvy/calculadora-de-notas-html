@@ -189,6 +189,81 @@
             -ms-overflow-style: none;
             scrollbar-width: none;
         }
+
+        /* --- PDF Print Styles --- */
+        @media print {
+            body {
+                background: white !important;
+                color: black !important;
+                font-size: 11px;
+            }
+            #root, #portal-root {
+                display: none !important;
+            }
+            #print-root {
+                display: block !important;
+            }
+            .print-page {
+                page-break-after: always;
+                padding: 15px;
+            }
+            .print-page:last-child {
+                page-break-after: avoid;
+            }
+            .print-title {
+                font-size: 18px;
+                font-weight: bold;
+                margin-bottom: 5px;
+                text-align: left;
+            }
+            .print-meta {
+                font-size: 10px;
+                color: #555;
+                margin-bottom: 12px;
+                text-align: left;
+            }
+            .print-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 8px;
+            }
+            .print-table th, .print-table td {
+                border: 1px solid #000 !important;
+                padding: 4px 3px;
+                text-align: center;
+            }
+            .print-table th {
+                background-color: #f2f2f2 !important;
+                font-weight: bold;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .print-highlight-green {
+                background-color: #dcfce7 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .print-highlight-yellow {
+                background-color: #fef9c3 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .print-highlight-blue {
+                background-color: #dbeafe !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .print-highlight-red {
+                background-color: #fee2e2 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+        @media screen {
+            #print-root {
+                display: none !important;
+            }
+        }
     </style>
 
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -229,6 +304,7 @@
 <body class="bg-[var(--bg)] text-[var(--fg)]">
     <div id="root"></div>
     <div id="portal-root"></div>
+    <div id="print-root"></div>
 
     <script type="text/babel" data-presets="env,react">
         // --- Theme manager (IIFE) ---
@@ -568,6 +644,297 @@
             );
         };
 
+        const PDFExportModal = ({ open, onClose, sheets, activeSheetId }) => {
+            const [selectedSheets, setSelectedSheets] = React.useState(() => {
+                const initial = {};
+                sheets.forEach(s => {
+                    initial[s.id] = s.id === activeSheetId;
+                });
+                return initial;
+            });
+
+            const [includeScores, setIncludeScores] = React.useState(true);
+            const [includeGrades, setIncludeGrades] = React.useState(true);
+            const [includeOffsets, setIncludeOffsets] = React.useState(false);
+            const [includeAverage, setIncludeAverage] = React.useState(true);
+            const [includeHighlights, setIncludeHighlights] = React.useState(true);
+
+            if (!open) return null;
+
+            const handleToggleSheet = (id) => {
+                setSelectedSheets(prev => ({ ...prev, [id]: !prev[id] }));
+            };
+
+            const handleExport = () => {
+                const printRoot = document.getElementById('print-root');
+                if (!printRoot) return;
+
+                printRoot.innerHTML = '';
+
+                const sheetsToExport = sheets.filter(s => selectedSheets[s.id]);
+                if (sheetsToExport.length === 0) {
+                    alert('Por favor selecciona al menos una hoja para exportar.');
+                    return;
+                }
+
+                sheetsToExport.forEach((sheet, sheetIdx) => {
+                    const pageContainer = document.createElement('div');
+                    pageContainer.className = 'print-page';
+
+                    const title = document.createElement('div');
+                    title.className = 'print-title';
+                    title.innerText = `Control de Notas: ${sheet.name}`;
+                    pageContainer.appendChild(title);
+
+                    const meta = document.createElement('div');
+                    meta.className = 'print-meta';
+                    meta.innerText = `Nota Mínima: ${sheet.settings.minGrade.toFixed(1)} · Aprobación: ${sheet.settings.passingGrade.toFixed(1)} · Nota Máxima: ${sheet.settings.maxGrade.toFixed(1)}`;
+                    pageContainer.appendChild(meta);
+
+                    const table = document.createElement('table');
+                    table.className = 'print-table';
+
+                    const headerRow = document.createElement('tr');
+                    
+                    const thNum = document.createElement('th');
+                    thNum.innerText = '#';
+                    thNum.style.width = '30px';
+                    headerRow.appendChild(thNum);
+
+                    const thName = document.createElement('th');
+                    thName.innerText = sheet.studentHeader || 'Alumnos';
+                    thName.style.textAlign = 'left';
+                    headerRow.appendChild(thName);
+
+                    sheet.evaluations.forEach(ev => {
+                        let colSpan = 0;
+                        if (includeScores) colSpan++;
+                        if (includeGrades) colSpan++;
+                        if (includeOffsets) colSpan++;
+
+                        if (colSpan > 0) {
+                            const thEv = document.createElement('th');
+                            thEv.colSpan = colSpan;
+                            thEv.innerHTML = `${ev.name}<br/><span style="font-size: 8px; font-weight: normal;">(Máx: ${ev.maxScore} | Exig: ${ev.exigency}%)</span>`;
+                            headerRow.appendChild(thEv);
+                        }
+                    });
+
+                    if (includeAverage) {
+                        const thAvg = document.createElement('th');
+                        thAvg.innerText = 'Promedio';
+                        thAvg.style.width = '60px';
+                        headerRow.appendChild(thAvg);
+                    }
+                    table.appendChild(headerRow);
+
+                    let needsSubHeader = false;
+                    const subHeaderRow = document.createElement('tr');
+                    
+                    sheet.evaluations.forEach(ev => {
+                        if (includeScores) {
+                            const thS = document.createElement('th');
+                            thS.innerText = 'Punt.';
+                            thS.style.fontSize = '8px';
+                            subHeaderRow.appendChild(thS);
+                            needsSubHeader = true;
+                        }
+                        if (includeGrades) {
+                            const thG = document.createElement('th');
+                            thG.innerText = 'Nota';
+                            thG.style.fontSize = '8px';
+                            subHeaderRow.appendChild(thG);
+                            needsSubHeader = true;
+                        }
+                        if (includeOffsets) {
+                            const thO = document.createElement('th');
+                            thO.innerText = 'Aju.';
+                            thO.style.fontSize = '8px';
+                            subHeaderRow.appendChild(thO);
+                            needsSubHeader = true;
+                        }
+                    });
+
+                    if (needsSubHeader) {
+                        table.appendChild(subHeaderRow);
+                        thNum.rowSpan = 2;
+                        thName.rowSpan = 2;
+                        if (includeAverage) {
+                            const thAvg = headerRow.lastChild;
+                            thAvg.rowSpan = 2;
+                        }
+                    }
+
+                    sheet.studentData.forEach((student, rIdx) => {
+                        const tr = document.createElement('tr');
+
+                        if (includeHighlights && student.highlight) {
+                            tr.className = `print-highlight-${student.highlight}`;
+                        }
+
+                        const tdNum = document.createElement('td');
+                        tdNum.innerText = rIdx + 1;
+                        tr.appendChild(tdNum);
+
+                        const tdName = document.createElement('td');
+                        tdName.innerText = student.name;
+                        tdName.style.textAlign = 'left';
+                        if (student.highlight === 'red') {
+                            tdName.style.textDecoration = 'line-through';
+                            tdName.style.fontStyle = 'italic';
+                        }
+                        tr.appendChild(tdName);
+
+                        let total = 0, count = 0;
+
+                        sheet.evaluations.forEach((ev, eIdx) => {
+                            let maxScore = ev.maxScore;
+                            if (ev.differentiatedScores.enabled && student.highlight) {
+                                maxScore = parseFloat(ev.differentiatedScores[student.highlight]) || ev.maxScore;
+                            }
+                            const baseGrade = calculateGrade(parseFloat(student.scores[eIdx]), maxScore, ev.exigency, sheet.settings);
+                            const offsetNum = parseFloat(String((student.offsets || [])[eIdx] ?? '').replace(',', '.'));
+                            const finalGrade = isNaN(baseGrade) ? NaN : (isNaN(offsetNum) ? baseGrade : Math.max(sheet.settings.minGrade, Math.min(sheet.settings.maxGrade, baseGrade + offsetNum)));
+
+                            if (!isNaN(finalGrade)) {
+                                total += finalGrade;
+                                count++;
+                            }
+
+                            if (includeScores) {
+                                const tdS = document.createElement('td');
+                                tdS.innerText = student.scores[eIdx] ?? '';
+                                tr.appendChild(tdS);
+                            }
+                            if (includeGrades) {
+                                const tdG = document.createElement('td');
+                                tdG.innerText = isNaN(finalGrade) ? '' : finalGrade.toFixed(1);
+                                if (!isNaN(finalGrade)) {
+                                    tdG.style.fontWeight = 'bold';
+                                    if (finalGrade >= sheet.settings.passingGrade) {
+                                        tdG.style.color = '#1d4ed8';
+                                    } else {
+                                        tdG.style.color = '#b91c1c';
+                                    }
+                                }
+                                tr.appendChild(tdG);
+                            }
+                            if (includeOffsets) {
+                                const tdO = document.createElement('td');
+                                tdO.innerText = (student.offsets || [])[eIdx] ?? '';
+                                tr.appendChild(tdO);
+                            }
+                        });
+
+                        if (includeAverage) {
+                            const tdAvg = document.createElement('td');
+                            const average = count > 0 ? total / count : NaN;
+                            tdAvg.innerText = isNaN(average) ? 'N/A' : average.toFixed(1);
+                            tdAvg.style.fontWeight = 'bold';
+                            if (!isNaN(average)) {
+                                if (average >= sheet.settings.passingGrade) {
+                                    tdAvg.style.color = '#1d4ed8';
+                                } else {
+                                    tdAvg.style.color = '#b91c1c';
+                                }
+                            }
+                            tr.appendChild(tdAvg);
+                        }
+
+                        table.appendChild(tr);
+                    });
+
+                    pageContainer.appendChild(table);
+                    printRoot.appendChild(pageContainer);
+                });
+
+                window.print();
+                onClose();
+            };
+
+            return (
+                <Modal open={open} onClose={onClose} title="Exportar a PDF" maxWidth="500px" className="max-h-[85vh] flex flex-col">
+                    <div className="space-y-4 text-sm text-[var(--fg)] flex-1 overflow-auto pr-1">
+                        <div>
+                            <h4 className="font-semibold text-blue-600 dark:text-blue-400 mb-2 border-b border-[var(--border)] pb-1">1. Seleccionar Hojas</h4>
+                            <div className="space-y-2 max-h-[150px] overflow-auto border border-[var(--border)] rounded p-2 bg-[var(--bg)]">
+                                {sheets.map(s => (
+                                    <label key={s.id} className="flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-[var(--hover)]">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!selectedSheets[s.id]}
+                                            onChange={() => handleToggleSheet(s.id)}
+                                            className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span>{s.name}</span>
+                                        <span className="text-xs text-[var(--muted)]">({s.studentData.length} alumnos, {s.evaluations.length} evals)</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 className="font-semibold text-blue-600 dark:text-blue-400 mb-2 border-b border-[var(--border)] pb-1">2. Columnas e Información a Incluir</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <label className="flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-[var(--hover)]">
+                                    <input
+                                        type="checkbox"
+                                        checked={includeScores}
+                                        onChange={e => setIncludeScores(e.target.checked)}
+                                        className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span>Puntajes de Evaluaciones</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-[var(--hover)]">
+                                    <input
+                                        type="checkbox"
+                                        checked={includeGrades}
+                                        onChange={e => setIncludeGrades(e.target.checked)}
+                                        className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span>Notas de Evaluaciones</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-[var(--hover)]">
+                                    <input
+                                        type="checkbox"
+                                        checked={includeOffsets}
+                                        onChange={e => setIncludeOffsets(e.target.checked)}
+                                        className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span>Aumentos / Ajustes (Offsets)</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-[var(--hover)]">
+                                    <input
+                                        type="checkbox"
+                                        checked={includeAverage}
+                                        onChange={e => setIncludeAverage(e.target.checked)}
+                                        className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span>Promedio Final</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-[var(--hover)] col-span-1 sm:col-span-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={includeHighlights}
+                                        onChange={e => setIncludeHighlights(e.target.checked)}
+                                        className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span>Mantener colores de resaltado</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-[var(--border)]">
+                        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+                        <Button variant="primary" onClick={handleExport} disabled={!Object.values(selectedSheets).some(Boolean)}>
+                            Exportar PDF
+                        </Button>
+                    </div>
+                </Modal>
+            );
+        };
+
         const OffsetModal = ({ open, onClose, onApply, studentName, evalName, value }) => {
             const [txt, setTxt] = React.useState(value ?? '');
             React.useEffect(() => { setTxt(value ?? ''); }, [value, open]);
@@ -653,6 +1020,7 @@
             onAddStudent,
             onFileImport,
             onExport,
+            onOpenExportPDF,
             sheetsCount,
             isSaving,
             lastSaved,
@@ -776,6 +1144,11 @@
                                     <button className="w-full text-left px-3 py-2 hover:bg-[var(--hover)] text-[var(--fg)]"
                                         onClick={() => { setMenuOpen(false); onExport(); }}>
                                         Exportar a Excel (.xlsx)
+                                    </button>
+                                    <div className="border-t border-[var(--border)] my-1"></div>
+                                    <button className="w-full text-left px-3 py-2 hover:bg-[var(--hover)] text-[var(--fg)]"
+                                        onClick={() => { setMenuOpen(false); onOpenExportPDF(); }}>
+                                        Exportar a PDF...
                                     </button>
                                     <div className="border-t border-[var(--border)] my-1"></div>
                                     <button className="w-full text-left px-3 py-2 hover:bg-[var(--hover)] text-[var(--fg)] disabled:text-[var(--muted)]"
@@ -1756,6 +2129,7 @@
             const [loadCodeInput, setLoadCodeInput] = React.useState('');
             const [isReceiving, setIsReceiving] = React.useState(false);
             const [infoOpen, setInfoOpen] = React.useState(false);
+            const [pdfOpen, setPdfOpen] = React.useState(false);
 
             // Structure: { remoteMap: object, code: "CODE" }
             const [syncConflict, setSyncConflict] = React.useState(null);
@@ -2203,6 +2577,12 @@
                             onCancel={() => setPendingImport(null)}
                         />
                     )}
+                    <PDFExportModal
+                        open={pdfOpen}
+                        onClose={() => setPdfOpen(false)}
+                        sheets={sheets}
+                        activeSheetId={activeSheetId}
+                    />
                     {isReceiving && (
                         <div className="fixed inset-0 z-[9999] bg-black/40 backdrop-blur-sm flex items-center justify-center pointer-events-auto">
                             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl flex flex-col items-center">
@@ -2243,6 +2623,7 @@
                         onAddStudent={handleAddStudent}
                         onFileImport={handleFileImport}
                         onExport={handleExport}
+                        onOpenExportPDF={() => setPdfOpen(true)}
                         sheetsCount={sheets.length}
                         isSaving={isSaving}
                         lastSaved={lastSaved}
