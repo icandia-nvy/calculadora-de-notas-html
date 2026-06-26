@@ -6,7 +6,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark">
-    <title>Calculadora de Notas</title>
+    <title>Administrador de Notas</title>
     <link rel="manifest" href="manifest.json" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
@@ -332,11 +332,6 @@
                 const mode = saved || (preferDark ? 'dark' : 'light');
                 applyTheme(mode);
             }
-
-            window.__toggleTheme = function () {
-                const isDark = ROOT.classList.contains('dark');
-                applyTheme(isDark ? 'light' : 'dark');
-            };
 
             initTheme();
         })();
@@ -779,26 +774,41 @@
                         const tdName = document.createElement('td');
                         tdName.innerText = student.name;
                         tdName.style.textAlign = 'left';
+                        const hasPending = student.scores.some(score => {
+                            if (score === '' || score === null || score === undefined) return false;
+                            const num = parseFloat(String(score).replace(',', '.'));
+                            return num === 0;
+                        });
                         if (student.highlight === 'red') {
                             tdName.style.textDecoration = 'line-through';
                             tdName.style.fontStyle = 'italic';
+                            tdName.style.color = '#6b7280';
+                        } else if (hasPending) {
+                            tdName.style.color = '#dc2626';
+                            tdName.style.fontWeight = 'bold';
                         }
                         tr.appendChild(tdName);
 
                         let total = 0, count = 0;
 
                         sheet.evaluations.forEach((ev, eIdx) => {
-                            let maxScore = ev.maxScore;
-                            if (ev.differentiatedScores.enabled && student.highlight) {
-                                maxScore = parseFloat(ev.differentiatedScores[student.highlight]) || ev.maxScore;
-                            }
-                            const baseGrade = calculateGrade(parseFloat(student.scores[eIdx]), maxScore, ev.exigency, sheet.settings);
-                            const offsetNum = parseFloat(String((student.offsets || [])[eIdx] ?? '').replace(',', '.'));
-                            const finalGrade = isNaN(baseGrade) ? NaN : (isNaN(offsetNum) ? baseGrade : Math.max(sheet.settings.minGrade, Math.min(sheet.settings.maxGrade, baseGrade + offsetNum)));
+                            const scoreVal = student.scores[eIdx];
+                            const isPending = scoreVal !== '' && scoreVal !== null && scoreVal !== undefined && parseFloat(String(scoreVal).replace(',', '.')) === 0;
 
-                            if (!isNaN(finalGrade)) {
-                                total += finalGrade;
-                                count++;
+                            let finalGrade = NaN;
+                            if (!isPending) {
+                                let maxScore = ev.maxScore;
+                                if (ev.differentiatedScores.enabled && student.highlight) {
+                                    maxScore = parseFloat(ev.differentiatedScores[student.highlight]) || ev.maxScore;
+                                }
+                                const baseGrade = calculateGrade(parseFloat(student.scores[eIdx]), maxScore, ev.exigency, sheet.settings);
+                                const offsetNum = parseFloat(String((student.offsets || [])[eIdx] ?? '').replace(',', '.'));
+                                finalGrade = isNaN(baseGrade) ? NaN : (isNaN(offsetNum) ? baseGrade : Math.max(sheet.settings.minGrade, Math.min(sheet.settings.maxGrade, baseGrade + offsetNum)));
+
+                                if (!isNaN(finalGrade)) {
+                                    total += finalGrade;
+                                    count++;
+                                }
                             }
 
                             if (includeScores) {
@@ -808,13 +818,19 @@
                             }
                             if (includeGrades) {
                                 const tdG = document.createElement('td');
-                                tdG.innerText = isNaN(finalGrade) ? '' : finalGrade.toFixed(1);
-                                if (!isNaN(finalGrade)) {
+                                if (isPending) {
+                                    tdG.innerText = 'PND';
                                     tdG.style.fontWeight = 'bold';
-                                    if (finalGrade >= sheet.settings.passingGrade) {
-                                        tdG.style.color = '#1d4ed8';
-                                    } else {
-                                        tdG.style.color = '#b91c1c';
+                                    tdG.style.color = '#b91c1c';
+                                } else {
+                                    tdG.innerText = isNaN(finalGrade) ? '' : finalGrade.toFixed(1);
+                                    if (!isNaN(finalGrade)) {
+                                        tdG.style.fontWeight = 'bold';
+                                        if (finalGrade >= sheet.settings.passingGrade) {
+                                            tdG.style.color = '#1d4ed8';
+                                        } else {
+                                            tdG.style.color = '#b91c1c';
+                                        }
                                     }
                                 }
                                 tr.appendChild(tdG);
@@ -1065,7 +1081,7 @@
             return (
                 <header className="flex flex-col sm:flex-row flex-wrap justify-between items-start sm:items-center mb-4 sm:mb-6 pb-4 border-b-2 border-[var(--border)] bg-[var(--card)] px-2 sm:px-4 py-3 sm:py-4 rounded-lg shadow-sm gap-4">
                     <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
-                        <h1 className="text-xl sm:text-3xl font-bold text-[var(--fg)]">Calculadora de Notas</h1>
+                        <h1 className="text-xl sm:text-3xl font-bold text-[var(--fg)]">Administrador de Notas</h1>
                         <Button
                             aria-label="Información y Ayuda"
                             onClick={onOpenInfo}
@@ -1251,11 +1267,17 @@
             handleScoreChange,
             handleScoreBlur,
             handleKeyDown,
-            inputRefs
+            inputRefs,
+            onFocusStudent,
+            onBlurStudent
         }) => {
             const rowData = React.useMemo(() => {
                 let total = 0, count = 0;
                 const grades = evaluations.map((ev, e) => {
+                    const scoreVal = student.scores[e];
+                    const isPending = scoreVal !== '' && scoreVal !== null && scoreVal !== undefined && parseFloat(String(scoreVal).replace(',', '.')) === 0;
+                    if (isPending) return 'PND';
+
                     let maxScore = ev.maxScore;
                     if (ev.differentiatedScores.enabled && student.highlight) {
                         maxScore = parseFloat(ev.differentiatedScores[student.highlight]) || ev.maxScore;
@@ -1275,26 +1297,35 @@
 
             return (
                 <tr className={`group h-14 ${student.highlight ? `highlight-${student.highlight}` : ''}`}>
-                    {evaluations.map((ev, e) => (
-                        <React.Fragment key={ev.id}>
-                            <td className={`p-1 text-sm text-center w-20 border-r border-[var(--border)] ${!student.highlight && e % 2 !== 0 ? 'bg-[var(--bg)]' : ''}`}>
-                                <input
-                                    type="text"
-                                    disabled={isWithdrawn}
-                                    value={student.scores[e] ?? ''}
-                                    onChange={evt => handleScoreChange(rowIndex, e, evt.target.value)}
-                                    onBlur={() => handleScoreBlur(rowIndex, e)}
-                                    onKeyDown={evt => handleKeyDown(evt, rowIndex, e)}
-                                    ref={el => inputRefs.current[`${rowIndex}-${e}`] = el}
-                                    className={`w-20 text-center bg-transparent focus:bg-[var(--hover)] p-2 rounded text-[var(--fg)] outline-none ${isWithdrawn ? 'cursor-not-allowed opacity-50 text-gray-500' : ''}`}
-                                />
-                            </td>
-                            <td title="Doble‑click para ajustar" onDoubleClick={() => onOpenOffset(rowIndex, e)} className={`p-1 text-sm text-center font-bold w-20 border-r border-[var(--border)] ${!isNaN(rowData.grades[e]) && (rowData.grades[e] >= sheetSettings.passingGrade ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400')
-                                } ${!student.highlight && e % 2 !== 0 ? 'bg-[var(--bg)]' : ''} ${isWithdrawn ? 'opacity-50' : ''}`}>
-                                {isNaN(rowData.grades[e]) ? 'N/A' : rowData.grades[e].toFixed(1)}
-                            </td>
-                        </React.Fragment>
-                    ))}
+                    {evaluations.map((ev, e) => {
+                        const isPnd = rowData.grades[e] === 'PND';
+                        return (
+                            <React.Fragment key={ev.id}>
+                                <td className={`p-1 text-sm text-center w-20 border-r border-[var(--border)] ${!student.highlight && e % 2 !== 0 ? 'bg-[var(--bg)]' : ''}`}>
+                                    <input
+                                        type="text"
+                                        disabled={isWithdrawn}
+                                        value={student.scores[e] ?? ''}
+                                        onChange={evt => handleScoreChange(rowIndex, e, evt.target.value)}
+                                        onFocus={() => onFocusStudent(student.id)}
+                                        onBlur={() => {
+                                            handleScoreBlur(rowIndex, e);
+                                            onBlurStudent();
+                                        }}
+                                        onKeyDown={evt => handleKeyDown(evt, rowIndex, e)}
+                                        ref={el => inputRefs.current[`${rowIndex}-${e}`] = el}
+                                        className={`w-20 text-center bg-transparent focus:bg-[var(--hover)] p-2 rounded text-[var(--fg)] outline-none ${isWithdrawn ? 'cursor-not-allowed opacity-50 text-gray-500' : ''}`}
+                                    />
+                                </td>
+                                <td title={isPnd ? "Prueba Pendiente" : "Doble‑click para ajustar"} onDoubleClick={() => !isPnd && onOpenOffset(rowIndex, e)} className={`p-1 text-sm text-center font-bold w-20 border-r border-[var(--border)] 
+                                    ${!isPnd && !isNaN(rowData.grades[e]) && (rowData.grades[e] >= sheetSettings.passingGrade ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400')}
+                                    ${isPnd ? 'text-red-600 dark:text-red-400' : ''} 
+                                    ${!student.highlight && e % 2 !== 0 ? 'bg-[var(--bg)]' : ''} ${isWithdrawn ? 'opacity-50' : ''}`}>
+                                    {isPnd ? 'PND' : (isNaN(rowData.grades[e]) ? 'N/A' : rowData.grades[e].toFixed(1))}
+                                </td>
+                            </React.Fragment>
+                        );
+                    })}
                     <td className={`p-4 text-sm text-center font-bold bg-[var(--bg)] border-l border-[var(--border)] ${isWithdrawn ? 'opacity-50' : ''} ${!isNaN(rowData.avg) && (rowData.avg >= sheetSettings.passingGrade ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400')}`}>
                         {isNaN(rowData.avg) ? 'N/A' : rowData.avg.toFixed(1)}
                     </td>
@@ -1334,6 +1365,8 @@
         };
 
         const GradesTable = ({ sheet, onUpdateSheet, onPushHistory, globalSettings }) => {
+            const [focusedStudentId, setFocusedStudentId] = React.useState(null);
+
             const ensureOffsetsLength = React.useCallback((arr, len) => {
                 const out = Array.isArray(arr) ? [...arr] : [];
                 while (out.length < len) out.push('');
@@ -1398,20 +1431,31 @@
                     const gradesList = [];
                     for (let r = 0; r < sheet.studentData.length; r++) {
                         const st = sheet.studentData[r];
-                        let maxScore = ev.maxScore;
-                        if (ev.differentiatedScores?.enabled && st.highlight) {
-                            const v = toNum(ev.differentiatedScores[st.highlight]);
-                            if (!isNaN(v) && v > 0) maxScore = v;
+                        const scoreVal = st.scores[i];
+                        const isPending = scoreVal !== '' && scoreVal !== null && scoreVal !== undefined && parseFloat(String(scoreVal).replace(',', '.')) === 0;
+
+                        let grade = NaN;
+                        if (!isPending) {
+                            let maxScore = ev.maxScore;
+                            if (ev.differentiatedScores?.enabled && st.highlight) {
+                                const v = toNum(ev.differentiatedScores[st.highlight]);
+                                if (!isNaN(v) && v > 0) maxScore = v;
+                            }
+                            const scoreNum = toNum(scoreVal);
+                            const maxScoreNum = toNum(maxScore);
+                            grade = calculateGrade(scoreNum, maxScoreNum, toNum(ev.exigency), sheet.settings);
                         }
-                        const scoreNum = toNum(st.scores[i]);
-                        const maxScoreNum = toNum(maxScore);
-                        const grade = calculateGrade(scoreNum, maxScoreNum, toNum(ev.exigency), sheet.settings);
 
                         if (!isNaN(grade)) {
                             sum += grade; count++;
                             gradesList.push(grade);
                             if (grade < sheet.settings.passingGrade) fail++;
-                            if (scoreNum >= (maxScoreNum * 0.9)) excellent++;
+                            let maxScore = ev.maxScore;
+                            if (ev.differentiatedScores?.enabled && st.highlight) {
+                                const v = toNum(ev.differentiatedScores[st.highlight]);
+                                if (!isNaN(v) && v > 0) maxScore = v;
+                            }
+                            if (toNum(scoreVal) >= (toNum(maxScore) * 0.9)) excellent++;
                         }
                     }
                     const average = count ? (sum / count) : NaN;
@@ -1645,30 +1689,46 @@
                         <tr className="h-10"></tr>
                     </thead>
                     <tbody className="bg-[var(--card)] divide-y divide-[var(--border)]">
-                        {sheet.studentData.map((s, r) => (
-                            <tr key={s.id} className={`group h-14 ${s.highlight ? `highlight-${s.highlight}` : ''}`}>
-                                <td className="p-4 text-sm relative text-center text-[var(--fg)]">{r + 1}
-                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button aria-label={`Eliminar estudiante ${s.name}`} onClick={() => delStudent(r)} className="p-1 bg-[var(--card)] rounded shadow hover:bg-red-100 dark:hover:bg-red-900/30"><span className="text-red-500 font-bold">×</span></button>
-                                    </div>
-                                </td>
-                                <td className="p-0 sm:p-1 text-sm">
-                                    <div className="flex items-center">
-                                        <textarea
-                                            title={s.name}
-                                            disabled={s.highlight === 'red'}
-                                            value={s.name}
-                                            onChange={e => handleNameChange(r, e.target.value)}
-                                            onBlur={handleNameBlur}
-                                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
-                                            rows={2}
-                                            className={`w-full p-1 sm:p-2 rounded transition-all bg-transparent text-[var(--fg)] focus:bg-[var(--hover)] resize-none overflow-hidden break-words text-xs sm:text-sm leading-tight h-10 sm:h-12 ${s.highlight === 'red' ? 'line-through text-gray-500 italic cursor-not-allowed' : ''}`}
-                                        />
-                                        <button aria-label="Cambiar color de resaltado" onClick={() => handleHighlight(r)} className="ml-2 text-xl text-[var(--muted)] hover:text-blue-600" title="Cambiar color">🎨</button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
+                        {sheet.studentData.map((s, r) => {
+                            const hasPending = s.scores.some(score => {
+                                if (score === '' || score === null || score === undefined) return false;
+                                const num = parseFloat(String(score).replace(',', '.'));
+                                return num === 0;
+                            });
+                            return (
+                                <tr key={s.id} className={`group h-14 ${s.highlight ? `highlight-${s.highlight}` : ''}`}>
+                                    <td className="p-4 text-sm relative text-center text-[var(--fg)]">{r + 1}
+                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button aria-label={`Eliminar estudiante ${s.name}`} onClick={() => delStudent(r)} className="p-1 bg-[var(--card)] rounded shadow hover:bg-red-100 dark:hover:bg-red-900/30"><span className="text-red-500 font-bold">×</span></button>
+                                        </div>
+                                    </td>
+                                    <td className="p-0 sm:p-1 text-sm">
+                                        <div className="flex items-center">
+                                            <textarea
+                                                title={s.name}
+                                                disabled={s.highlight === 'red'}
+                                                value={s.name}
+                                                onChange={e => handleNameChange(r, e.target.value)}
+                                                onFocus={() => setFocusedStudentId(s.id)}
+                                                onBlur={() => {
+                                                    handleNameBlur();
+                                                    setFocusedStudentId(null);
+                                                }}
+                                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                                                rows={2}
+                                                className={`w-full p-1 sm:p-2 rounded transition-all bg-transparent resize-none overflow-hidden break-words text-xs sm:text-sm leading-tight h-10 sm:h-12 
+                                                    ${s.highlight === 'red' 
+                                                        ? 'line-through text-gray-500 italic cursor-not-allowed' 
+                                                        : (hasPending ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-[var(--fg)]')
+                                                    } 
+                                                    ${s.id === focusedStudentId ? 'bg-blue-100/50 dark:bg-blue-900/30 ring-1 ring-blue-500/50' : ''}`}
+                                            />
+                                            <button aria-label="Cambiar color de resaltado" onClick={() => handleHighlight(r)} className="ml-2 text-xl text-[var(--muted)] hover:text-blue-600" title="Cambiar color">🎨</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
 
                     {globalSettings?.showAdvanced && (
@@ -1748,7 +1808,9 @@
                             <StudentRow key={s.id} student={s} rowIndex={r} evaluations={sheet.evaluations} onOpenOffset={onOpenOffset}
                                 sheetSettings={sheet.settings} handleScoreChange={handleScoreChange}
                                 handleScoreBlur={handleScoreBlur} handleKeyDown={handleKeyDown}
-                                inputRefs={inputRefs} />
+                                inputRefs={inputRefs}
+                                onFocusStudent={setFocusedStudentId}
+                                onBlurStudent={() => setFocusedStudentId(null)} />
                         ))}
                     </tbody>
 
@@ -2539,11 +2601,14 @@
                             let total = 0, count = 0;
                             const row = [idx + 1, st.name];
                             sheet.evaluations.forEach((ev, i) => {
+                                const scoreVal = st.scores[i];
+                                const isPending = scoreVal !== '' && scoreVal !== null && scoreVal !== undefined && parseFloat(String(scoreVal).replace(',', '.')) === 0;
+
                                 let maxScore = ev.maxScore;
                                 if (ev.differentiatedScores.enabled && st.highlight) maxScore = ev.differentiatedScores[st.highlight] || ev.maxScore;
                                 const score = parseFloat(st.scores[i]);
-                                const grade = calculateGrade(score, maxScore, ev.exigency, sheet.settings);
-                                row.push(st.scores[i] ?? '', isNaN(grade) ? '' : grade.toFixed(1), (st.offsets || [])[i] ?? '');
+                                const grade = isPending ? NaN : calculateGrade(score, maxScore, ev.exigency, sheet.settings);
+                                row.push(st.scores[i] ?? '', isPending ? 'PND' : (isNaN(grade) ? '' : grade.toFixed(1)), (st.offsets || [])[i] ?? '');
                                 if (!isNaN(grade)) { total += grade; count++; }
                             });
                             const avg = count ? (total / count) : NaN;
