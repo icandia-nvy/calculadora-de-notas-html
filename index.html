@@ -12,6 +12,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="Calc Notas" />
 
+    <!-- Google Sheets API & OAuth scripts -->
+    <script src="https://apis.google.com/js/api.js" async defer></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         // MEJORA 3: Configuración explícita de Tailwind
@@ -1224,10 +1228,30 @@
             );
         });
 
-        const GlobalSettings = React.memo(({ settings, setSettings }) => {
+        const GlobalSettings = React.memo(({ 
+            settings, 
+            setSettings,
+            isGoogleSignedIn,
+            onGoogleSignIn,
+            onPushGoogleSheets,
+            onPullGoogleSheets,
+            isSyncingGoogle,
+            onOpenGooglePicker
+        }) => {
+            const handleUpdateGoogleSheetUrl = (url) => {
+                let id = '';
+                if (url.trim()) {
+                    const match = url.match(/\/d\/([a-zA-Z0-9\-_]+)/);
+                    if (match && match[1]) {
+                        id = match[1];
+                    }
+                }
+                setSettings(p => ({ ...p, googleSheetUrl: url, googleSpreadsheetId: id }));
+            };
+
             return (
                 <div className="space-y-3">
-                    <div className="pt-2">
+                    <div className="pt-2 border-b border-[var(--border)] pb-3">
                         <label className="inline-flex items-center gap-2 text-sm text-[var(--fg)]">
                             <input
                                 type="checkbox"
@@ -1246,6 +1270,119 @@
                                 />
                                 <span>Activar modo nocturno</span>
                             </label>
+                        </div>
+                    </div>
+
+                    <div className="pt-1 border-b border-[var(--border)] pb-3">
+                        <details className="group">
+                            <summary className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider cursor-pointer select-none outline-none flex items-center justify-between">
+                                <span>Configuración de Google Cloud (Avanzado)</span>
+                                <span className="text-[10px] text-[var(--muted)] group-open:rotate-180 transition-transform">▾</span>
+                            </summary>
+                            <div className="space-y-2 mt-2 pt-1">
+                                <div>
+                                    <label className="block text-xs text-[var(--muted)] mb-1">Google OAuth Client ID</label>
+                                    <input 
+                                        type="text" 
+                                        value={settings.googleClientId || ''} 
+                                        onChange={e => setSettings(p => ({ ...p, googleClientId: e.target.value.trim() }))}
+                                        placeholder="Introduce tu Client ID"
+                                        className="w-full text-[10px] border border-[var(--border)] rounded px-2 py-1.5 bg-[var(--input-bg)] text-[var(--fg)] font-mono outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-[var(--muted)] mb-1">Google API Key</label>
+                                    <input 
+                                        type="password" 
+                                        value={settings.googleApiKey || ''} 
+                                        onChange={e => setSettings(p => ({ ...p, googleApiKey: e.target.value.trim() }))}
+                                        placeholder="Introduce tu API Key"
+                                        className="w-full text-[10px] border border-[var(--border)] rounded px-2 py-1.5 bg-[var(--input-bg)] text-[var(--fg)] font-mono outline-none"
+                                    />
+                                </div>
+                                <p className="text-[9px] text-[var(--muted)] leading-relaxed">
+                                    Nota: Si dejas estos campos vacíos, la app intentará usar las claves predeterminadas del desarrollador.
+                                </p>
+                            </div>
+                        </details>
+                    </div>
+
+                    <div className="pt-1">
+                        <h4 className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2">Planilla Google Sheets</h4>
+                        <div className="space-y-2">
+                            <div>
+                                <label className="block text-xs text-[var(--muted)] mb-1">Enlace del Documento (1 solo para toda la app)</label>
+                                <input 
+                                    type="text" 
+                                    value={settings.googleSheetUrl || ''} 
+                                    onChange={e => handleUpdateGoogleSheetUrl(e.target.value)}
+                                    placeholder="Pegar enlace de Google Sheet"
+                                    className="w-full text-xs border border-[var(--border)] rounded px-2 py-1.5 bg-[var(--input-bg)] text-[var(--fg)] outline-none"
+                                />
+                            </div>
+
+                            <div className="pt-1">
+                                <Button 
+                                    variant="secondary" 
+                                    className="text-xs w-full py-1.5 px-3 flex items-center justify-center gap-1.5"
+                                    onClick={() => onOpenGooglePicker((url, id) => {
+                                        setSettings(p => ({ ...p, googleSheetUrl: url, googleSpreadsheetId: id }));
+                                    })}
+                                >
+                                    <span>📁</span>
+                                    <span>Seleccionar desde Google Drive</span>
+                                </Button>
+                            </div>
+
+                            <div className="pt-1">
+                                <label className="inline-flex items-center gap-2 text-xs text-[var(--fg)] cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={!!settings.autoSyncGoogle}
+                                        onChange={e => setSettings(p => ({ ...p, autoSyncGoogle: e.target.checked }))}
+                                        className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span>Sincronización automática (Auto-Push)</span>
+                                </label>
+                                <p className="text-[9px] text-[var(--muted)] pl-6 leading-relaxed">
+                                    Sube los cambios automáticamente tras 2 minutos de inactividad.
+                                </p>
+                            </div>
+                            
+                            <div className="pt-1">
+                                {isGoogleSignedIn ? (
+                                    <div className="flex flex-col gap-2">
+                                        <div className="text-[10px] text-green-600 dark:text-green-400 font-medium">✓ Cuenta Conectada</div>
+                                        <div className="flex gap-2">
+                                            <Button 
+                                                variant="primary" 
+                                                className="text-[10px] flex-1 py-1 px-2" 
+                                                onClick={onPullGoogleSheets} 
+                                                disabled={!settings.googleSpreadsheetId || isSyncingGoogle}
+                                            >
+                                                {isSyncingGoogle ? 'Cargando...' : 'Importar todo (Pull)'}
+                                            </Button>
+                                            <Button 
+                                                variant="success" 
+                                                className="text-[10px] flex-1 py-1 px-2" 
+                                                onClick={onPushGoogleSheets} 
+                                                disabled={!settings.googleSpreadsheetId || isSyncingGoogle}
+                                            >
+                                                {isSyncingGoogle ? 'Guardando...' : 'Exportar todo (Push)'}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <Button 
+                                        variant="secondary" 
+                                        className="text-xs w-full py-1.5 px-3 whitespace-nowrap" 
+                                        onClick={() => onGoogleSignIn()}
+                                        disabled={(!settings.googleClientId && !DEFAULT_GOOGLE_CLIENT_ID) || (!settings.googleApiKey && !DEFAULT_GOOGLE_API_KEY)}
+                                    >
+                                        Conectar Google Account
+                                    </Button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1941,7 +2078,6 @@
                                         onChange={v => onUpdateSheet({ ...sheet, settings: { ...sheet.settings, maxGrade: v } })} />
                                 </div>
                             </div>
-                            
                             <div className="flex-1 flex flex-col min-h-[200px]">
                                 <h4 className="font-medium text-[var(--fg)] mb-1">Añadir/Reemplazar Alumnos en Masa</h4>
                                 <p className="text-xs text-[var(--muted)] mb-2">
@@ -1983,8 +2119,10 @@
            APP PRINCIPAL
            ========================= */
         // MEJORA 4: Importación Correcta de Highlight
-        const parseSheetToModel = (sheetName, sheet, XLSX) => {
-            const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        const DEFAULT_GOOGLE_CLIENT_ID = ''; // Pega tu Client ID aquí por defecto
+        const DEFAULT_GOOGLE_API_KEY = '';    // Pega tu API Key aquí por defecto
+
+        const parseJsonToModel = (sheetName, json) => {
             if (!json || json.length < 5) return null;
 
             const headerRow = json[4];
@@ -2079,6 +2217,11 @@
                 studentColumnWidth,
                 settings: { minGrade, passingGrade, maxGrade }
             };
+        };
+
+        const parseSheetToModel = (sheetName, sheet, XLSX) => {
+            const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+            return parseJsonToModel(sheetName, json);
         };
 
         const defaultState = {
@@ -2253,6 +2396,381 @@
                 setSyncMessage(msg);
                 setTimeout(() => setSyncMessage(null), 4000);
             }, []);
+
+            // Estados para Sincronización de Google Sheets
+            const [googleApiLoaded, setGoogleApiLoaded] = React.useState(false);
+            const [isGoogleSignedIn, setIsGoogleSignedIn] = React.useState(false);
+            const [isSyncingGoogle, setIsSyncingGoogle] = React.useState(false);
+            const tokenClientRef = React.useRef(null);
+            const pendingActionRef = React.useRef(null);
+
+            // Inicializar las librerías dinámicamente si no se han cargado aún
+            const initGoogleApi = React.useCallback(() => {
+                return new Promise((resolve, reject) => {
+                    if (googleApiLoaded && window.gapi && window.google) {
+                        resolve();
+                        return;
+                    }
+
+                    const clientId = globalSettings.googleClientId || DEFAULT_GOOGLE_CLIENT_ID;
+                    const apiKey = globalSettings.googleApiKey || DEFAULT_GOOGLE_API_KEY;
+
+                    if (!clientId || !apiKey) {
+                        alert("Por favor configura tu Google Client ID y API Key en los Ajustes Globales ⚙️ (o pre-configúralas en el código de la app).");
+                        reject(new Error("Missing credentials"));
+                        return;
+                    }
+
+                    const scriptGapi = document.createElement('script');
+                    scriptGapi.src = 'https://apis.google.com/js/api.js';
+                    scriptGapi.async = true;
+                    scriptGapi.defer = true;
+                    scriptGapi.onload = () => {
+                        window.gapi.load('client:picker', async () => {
+                            try {
+                                await window.gapi.client.init({
+                                    apiKey: apiKey,
+                                    discoveryDocs: ["https://sheets.googleapis.com/$discovery/rest?version=v4"]
+                                });
+                                
+                                const scriptGis = document.createElement('script');
+                                scriptGis.src = 'https://accounts.google.com/gsi/client';
+                                scriptGis.async = true;
+                                scriptGis.defer = true;
+                                scriptGis.onload = () => {
+                                    try {
+                                        tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
+                                            client_id: clientId,
+                                            scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.readonly',
+                                            callback: (tokenResponse) => {
+                                                if (tokenResponse.error !== undefined) {
+                                                    console.error(tokenResponse);
+                                                    setIsSyncingGoogle(false);
+                                                    return;
+                                                }
+                                                setIsGoogleSignedIn(true);
+                                                if (pendingActionRef.current) {
+                                                    pendingActionRef.current();
+                                                    pendingActionRef.current = null;
+                                                }
+                                            },
+                                        });
+                                        setGoogleApiLoaded(true);
+                                        resolve();
+                                    } catch (e) {
+                                        console.error("Error GIS initialization:", e);
+                                        reject(e);
+                                    }
+                                };
+                                document.head.appendChild(scriptGis);
+                            } catch (e) {
+                                console.error("Error GAPI initialization:", e);
+                                reject(e);
+                            }
+                        });
+                    };
+                    document.head.appendChild(scriptGapi);
+                });
+            }, [googleApiLoaded, globalSettings.googleClientId, globalSettings.googleApiKey]);
+
+            const handleGoogleSignIn = React.useCallback(async (pendingAction = null) => {
+                try {
+                    await initGoogleApi();
+                    if (pendingAction) {
+                        pendingActionRef.current = pendingAction;
+                    }
+                    tokenClientRef.current.requestAccessToken({ prompt: 'consent' });
+                } catch (e) {
+                    console.error("Error signing in:", e);
+                }
+            }, [initGoogleApi]);
+
+            const ensureGoogleAuth = React.useCallback(async (action) => {
+                if (isGoogleSignedIn && window.gapi && window.gapi.client && window.gapi.client.getToken()) {
+                    await action();
+                    return;
+                }
+                await handleGoogleSignIn(action);
+            }, [isGoogleSignedIn, handleGoogleSignIn]);
+
+            const handleOpenGooglePicker = React.useCallback((onFileSelected) => {
+                ensureGoogleAuth(async () => {
+                    const apiKey = globalSettings.googleApiKey || DEFAULT_GOOGLE_API_KEY;
+                    const token = window.gapi.client.getToken();
+                    if (!token || !token.access_token) {
+                        alert("No se pudo obtener el token de acceso de Google.");
+                        return;
+                    }
+                    try {
+                        const view = new window.google.picker.View(window.google.picker.ViewId.SPREADSHEETS);
+                        const picker = new window.google.picker.PickerBuilder()
+                            .addView(view)
+                            .setOAuthToken(token.access_token)
+                            .setDeveloperKey(apiKey)
+                            .setCallback((data) => {
+                                if (data.action === window.google.picker.Action.PICKED) {
+                                    const doc = data.docs[0];
+                                    if (doc) {
+                                        onFileSelected(doc.url, doc.id);
+                                    }
+                                }
+                            })
+                            .build();
+                        picker.setVisible(true);
+                    } catch (err) {
+                        console.error("Error al abrir Google Picker:", err);
+                        alert("Ocurrió un error al abrir el explorador de Google Drive. Revisa tu API Key y configuración.");
+                    }
+                });
+            }, [ensureGoogleAuth, globalSettings.googleApiKey]);
+
+            // Helper para convertir hoja a arreglo bidimensional (AOA)
+            const sheetToAoa = React.useCallback((sheet) => {
+                const rows = sheet.studentData.map((st, idx) => {
+                    let total = 0, count = 0;
+                    const row = [idx + 1, st.name];
+                    sheet.evaluations.forEach((ev, i) => {
+                        const scoreVal = st.scores[i];
+                        const isPending = scoreVal !== '' && scoreVal !== null && scoreVal !== undefined && parseFloat(String(scoreVal).replace(',', '.')) === 0;
+                        const isEx = scoreVal === 'EX';
+
+                        let maxScore = ev.maxScore;
+                        if (ev.differentiatedScores.enabled && st.highlight) maxScore = ev.differentiatedScores[st.highlight] || ev.maxScore;
+                        const score = parseFloat(st.scores[i]);
+                        const grade = (isPending || isEx) ? NaN : calculateGrade(score, maxScore, ev.exigency, sheet.settings);
+                        row.push(st.scores[i] ?? '', isPending ? 'PND' : (isEx ? 'EX' : (isNaN(grade) ? '' : grade.toFixed(1))), (st.offsets || [])[i] ?? '');
+                        if (!isNaN(grade)) { total += grade; count++; }
+                    });
+                    const avg = count ? (total / count) : NaN;
+                    row.push(isNaN(avg) ? '' : avg.toFixed(1));
+                    row.push(st.highlight || '');
+                    return row;
+                });
+                return [
+                    ['MinGrade:' + sheet.settings.minGrade, '', ...sheet.evaluations.flatMap(ev => [ev.name, '', ''])],
+                    ['PassingGrade:' + sheet.settings.passingGrade, 'P. Máx:', ...sheet.evaluations.flatMap(ev => [ev.maxScore, '', ''])],
+                    ['MaxGrade:' + sheet.settings.maxGrade, 'Exig:', ...sheet.evaluations.flatMap(ev => [ev.exigency, '', ''])],
+                    ['Width:' + (sheet.studentColumnWidth || 200), 'Diferenciados', ...sheet.evaluations.flatMap(ev => [ev.differentiatedScores.enabled ? 'SI' : 'NO', `${ev.differentiatedScores.green},${ev.differentiatedScores.yellow},${ev.differentiatedScores.blue}`, ''])],
+                    ['#', sheet.studentHeader, ...sheet.evaluations.flatMap(() => ['Puntaje', 'Nota', 'Offset']), 'Promedio Final', 'Highlight'],
+                    ...rows
+                ];
+            }, []);
+
+            const handlePushGoogleSheets = React.useCallback(() => {
+                ensureGoogleAuth(async () => {
+                    const spreadsheetId = globalSettings.googleSpreadsheetId;
+                    if (!spreadsheetId) {
+                        alert("No hay ningún Google Sheet vinculado. Configúralo en los Ajustes Globales ⚙️.");
+                        return;
+                    }
+                    if (sheets.length === 0) {
+                        alert("No hay hojas locales para exportar.");
+                        return;
+                    }
+                    setIsSyncingGoogle(true);
+                    try {
+                        // 1. Obtener la metadata del spreadsheet remoto para listar las hojas existentes
+                        const responseMeta = await window.gapi.client.sheets.spreadsheets.get({
+                            spreadsheetId: spreadsheetId
+                        });
+                        const remoteSheetNames = responseMeta.result.sheets.map(s => s.properties.title);
+
+                        // 2. Crear las pestañas locales que no existen de forma remota
+                        const addRequests = [];
+                        sheets.forEach(s => {
+                            if (!remoteSheetNames.includes(s.name)) {
+                                addRequests.push({
+                                    addSheet: {
+                                        properties: {
+                                            title: s.name
+                                        }
+                                    }
+                                });
+                            }
+                        });
+
+                        if (addRequests.length > 0) {
+                            await window.gapi.client.sheets.spreadsheets.batchUpdate({
+                                spreadsheetId: spreadsheetId,
+                                resource: {
+                                    requests: addRequests
+                                }
+                            });
+                        }
+
+                        // 3. batchClear en las pestañas locales actuales para borrar datos viejos
+                        const rangesToClear = sheets.map(s => `'${s.name.replace(/'/g, "''")}'!A1:ZZ1000`);
+                        await window.gapi.client.sheets.spreadsheets.values.batchClear({
+                            spreadsheetId: spreadsheetId,
+                            resource: {
+                                ranges: rangesToClear
+                            }
+                        });
+
+                        // 4. batchUpdate para escribir los datos de todas las pestañas locales
+                        const data = sheets.map(s => {
+                            const aoa = sheetToAoa(s);
+                            return {
+                                range: `'${s.name.replace(/'/g, "''")}'!A1`,
+                                values: aoa
+                            };
+                        });
+
+                        await window.gapi.client.sheets.spreadsheets.values.batchUpdate({
+                            spreadsheetId: spreadsheetId,
+                            resource: {
+                                valueInputOption: 'USER_ENTERED',
+                                data: data
+                            }
+                        });
+
+                        alert("¡Sincronización Push Exitosa!\nTodas las pestañas de la calculadora se han exportado y alineado con Google Sheets.");
+                    } catch (err) {
+                        console.error("Error pushing to Google Sheets:", err);
+                        alert("Error al intentar escribir en Google Sheets. Revisa la consola para más detalles.");
+                    } finally {
+                        setIsSyncingGoogle(false);
+                    }
+                });
+            }, [ensureGoogleAuth, sheetToAoa, sheets, globalSettings.googleSpreadsheetId]);
+
+            const handlePullGoogleSheets = React.useCallback(() => {
+                ensureGoogleAuth(async () => {
+                    const spreadsheetId = globalSettings.googleSpreadsheetId;
+                    if (!spreadsheetId) {
+                        alert("No hay ningún Google Sheet vinculado. Configúralo en los Ajustes Globales ⚙️.");
+                        return;
+                    }
+                    setIsSyncingGoogle(true);
+                    try {
+                        // 1. Obtener los nombres de todas las pestañas en el documento remoto
+                        const responseMeta = await window.gapi.client.sheets.spreadsheets.get({
+                            spreadsheetId: spreadsheetId
+                        });
+                        const remoteSheetNames = responseMeta.result.sheets.map(s => s.properties.title);
+                        if (remoteSheetNames.length === 0) {
+                            alert("El documento de Google Sheets no contiene ninguna pestaña.");
+                            return;
+                        }
+
+                        // 2. Hacer batchGet de todas las pestañas
+                        const ranges = remoteSheetNames.map(name => `'${name.replace(/'/g, "''")}'!A1:ZZ1000`);
+                        const responseValues = await window.gapi.client.sheets.spreadsheets.values.batchGet({
+                            spreadsheetId: spreadsheetId,
+                            ranges: ranges
+                        });
+
+                        const valueRanges = responseValues.result.valueRanges;
+                        if (!valueRanges || valueRanges.length === 0) {
+                            alert("No se pudieron leer datos del documento remoto.");
+                            return;
+                        }
+
+                        // 3. Parsear cada pestaña remota y actualizar el estado
+                        const importedSheets = valueRanges.map((vr, idx) => {
+                            const name = remoteSheetNames[idx];
+                            const values = vr.values;
+                            if (!values || values.length < 5) return null;
+                            return parseJsonToModel(name, values);
+                        }).filter(Boolean);
+
+                        if (importedSheets.length === 0) {
+                            alert("Ninguna pestaña en Google Sheets contiene un formato válido compatible con el Administrador.");
+                            return;
+                        }
+
+                        pushHistory();
+                        setSheets(importedSheets);
+                        setActiveSheetId(importedSheets[0].id);
+                        alert(`¡Sincronización Pull Exitosa!\nSe han cargado ${importedSheets.length} pestañas desde Google Sheets.`);
+                    } catch (err) {
+                        console.error("Error pulling from Google Sheets:", err);
+                        alert("Error al intentar leer de Google Sheets. Revisa la consola para más detalles.");
+                    } finally {
+                        setIsSyncingGoogle(false);
+                    }
+                });
+            }, [ensureGoogleAuth, globalSettings.googleSpreadsheetId]);
+
+            // Sincronización Automática con Google Sheets (Auto-Push debouncado a 2 minutos)
+            React.useEffect(() => {
+                if (!globalSettings.autoSyncGoogle || !isGoogleSignedIn || !globalSettings.googleSpreadsheetId || isSyncingGoogle) {
+                    return;
+                }
+
+                const timer = setTimeout(() => {
+                    if (isReceiving) return;
+
+                    const doSilentPush = async () => {
+                        try {
+                            if (sheets.length === 0) return;
+
+                            // 1. Obtener las pestañas existentes remotas
+                            const responseMeta = await window.gapi.client.sheets.spreadsheets.get({
+                                spreadsheetId: globalSettings.googleSpreadsheetId
+                            });
+                            const remoteSheetNames = responseMeta.result.sheets.map(s => s.properties.title);
+
+                            // 2. Crear las pestañas locales que no existen remotamente
+                            const addRequests = [];
+                            sheets.forEach(s => {
+                                if (!remoteSheetNames.includes(s.name)) {
+                                    addRequests.push({
+                                        addSheet: {
+                                            properties: {
+                                                title: s.name
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+
+                            if (addRequests.length > 0) {
+                                await window.gapi.client.sheets.spreadsheets.batchUpdate({
+                                    spreadsheetId: globalSettings.googleSpreadsheetId,
+                                    resource: {
+                                        requests: addRequests
+                                    }
+                                });
+                            }
+
+                            // 3. batchClear en las celdas de las pestañas
+                            const rangesToClear = sheets.map(s => `'${s.name.replace(/'/g, "''")}'!A1:ZZ1000`);
+                            await window.gapi.client.sheets.spreadsheets.values.batchClear({
+                                spreadsheetId: globalSettings.googleSpreadsheetId,
+                                resource: {
+                                    ranges: rangesToClear
+                                }
+                            });
+
+                            // 4. batchUpdate para escribir los datos de todas las pestañas locales
+                            const data = sheets.map(s => {
+                                const aoa = sheetToAoa(s);
+                                return {
+                                    range: `'${s.name.replace(/'/g, "''")}'!A1`,
+                                    values: aoa
+                                };
+                            });
+
+                            await window.gapi.client.sheets.spreadsheets.values.batchUpdate({
+                                spreadsheetId: globalSettings.googleSpreadsheetId,
+                                resource: {
+                                    valueInputOption: 'USER_ENTERED',
+                                    data: data
+                                }
+                            });
+
+                            showSyncMessage("Google Sheets auto-sincronizado");
+                        } catch (err) {
+                            console.error("Error en auto-push a Google Sheets:", err);
+                        }
+                    };
+
+                    doSilentPush();
+                }, 120000); // 2 minutos (120,000 ms)
+
+                return () => clearTimeout(timer);
+            }, [sheets, isGoogleSignedIn, globalSettings.autoSyncGoogle, globalSettings.googleSpreadsheetId, activeSheetId, isReceiving, sheetToAoa]);
 
             const undoStackRef = React.useRef([]);
             const redoStackRef = React.useRef([]);
@@ -2845,7 +3363,16 @@
                         </div>
                     </Modal>
                     <SettingsPopover anchorId="settings-btn" open={settingsOpen} onClose={() => setSettingsOpen(false)}>
-                        <GlobalSettings settings={globalSettings} setSettings={setGlobalSettings} />
+                        <GlobalSettings 
+                            settings={globalSettings} 
+                            setSettings={setGlobalSettings} 
+                            isGoogleSignedIn={isGoogleSignedIn}
+                            onGoogleSignIn={handleGoogleSignIn}
+                            onPushGoogleSheets={handlePushGoogleSheets}
+                            onPullGoogleSheets={handlePullGoogleSheets}
+                            isSyncingGoogle={isSyncingGoogle}
+                            onOpenGooglePicker={handleOpenGooglePicker}
+                        />
                     </SettingsPopover>
                     {sheets.length > 0 && (
                         <Tabs
@@ -2877,7 +3404,18 @@
                         />
                     )}
                     {sheets.length && activeSheet ? (
-                        <GradesTable key={activeSheetId} sheet={activeSheet} onUpdateSheet={handleUpdateSheet} onPushHistory={pushHistory} globalSettings={globalSettings} />
+                        <GradesTable 
+                            key={activeSheetId} 
+                            sheet={activeSheet} 
+                            onUpdateSheet={handleUpdateSheet} 
+                            onPushHistory={pushHistory} 
+                            globalSettings={globalSettings}
+                            isGoogleSignedIn={isGoogleSignedIn}
+                            onGoogleSignIn={handleGoogleSignIn}
+                            onPushGoogleSheets={handlePushGoogleSheets}
+                            onPullGoogleSheets={handlePullGoogleSheets}
+                            isSyncingGoogle={isSyncingGoogle}
+                        />
                     ) : (
                         <div className="text-center p-10 rounded-lg shadow-md bg-[var(--card)] text-[var(--fg)]">
                             <h2 className="text-2xl font-bold mb-4">Comienza a Calcular Notas</h2>
