@@ -738,18 +738,18 @@
                             subHeaderRow.appendChild(thS);
                             needsSubHeader = true;
                         }
-                        if (includeGrades) {
-                            const thG = document.createElement('th');
-                            thG.innerText = 'Nota';
-                            thG.style.fontSize = '8px';
-                            subHeaderRow.appendChild(thG);
-                            needsSubHeader = true;
-                        }
                         if (includeOffsets) {
                             const thO = document.createElement('th');
                             thO.innerText = 'Aju.';
                             thO.style.fontSize = '8px';
                             subHeaderRow.appendChild(thO);
+                            needsSubHeader = true;
+                        }
+                        if (includeGrades) {
+                            const thG = document.createElement('th');
+                            thG.innerText = 'Nota';
+                            thG.style.fontSize = '8px';
+                            subHeaderRow.appendChild(thG);
                             needsSubHeader = true;
                         }
                     });
@@ -821,6 +821,11 @@
                                 tdS.innerText = student.scores[eIdx] ?? '';
                                 tr.appendChild(tdS);
                             }
+                            if (includeOffsets) {
+                                const tdO = document.createElement('td');
+                                tdO.innerText = (student.offsets || [])[eIdx] ?? '';
+                                tr.appendChild(tdO);
+                            }
                             if (includeGrades) {
                                 const tdG = document.createElement('td');
                                 if (isPending) {
@@ -843,11 +848,6 @@
                                     }
                                 }
                                 tr.appendChild(tdG);
-                            }
-                            if (includeOffsets) {
-                                const tdO = document.createElement('td');
-                                tdO.innerText = (student.offsets || [])[eIdx] ?? '';
-                                tr.appendChild(tdO);
                             }
                         });
 
@@ -978,11 +978,11 @@
                 const n = parseFloat((txt || '0').replace(',', '.'));
                 const next = (isNaN(n) ? 0 : n) + d;
                 const rounded = Math.round(next * 10) / 10;
-                setTxt(String(rounded).replace('.', ','));
+                setTxt(String(rounded));
             };
 
             const handleSave = () => {
-                onApply(txt, exempt);
+                onApply(txt ? txt.replace(',', '.') : '', exempt);
             };
 
             return (
@@ -1011,11 +1011,11 @@
                             disabled={exempt}
                             onKeyDown={e => { if (e.key === 'Enter') handleSave(); else if (e.key === 'Escape') onClose(); }}
                             className={`border border-[var(--border)] rounded px-2 py-2 w-full font-mono text-lg bg-[var(--input-bg)] text-[var(--fg)] ${exempt ? 'opacity-50 cursor-not-allowed' : ''}`} 
-                            placeholder="0,0" 
+                            placeholder="0.0" 
                         />
                         <div className="flex flex-col gap-2">
-                            <Button variant="ghost" disabled={exempt} onClick={() => step(-0.1)} className="px-3 py-2">−0,1</Button>
-                            <Button variant="ghost" disabled={exempt} onClick={() => step(+0.1)} className="px-3 py-2">+0,1</Button>
+                            <Button variant="ghost" disabled={exempt} onClick={() => step(-0.1)} className="px-3 py-2">−0.1</Button>
+                            <Button variant="ghost" disabled={exempt} onClick={() => step(+0.1)} className="px-3 py-2">+0.1</Button>
                         </div>
                     </div>
                     <div className="flex justify-between mt-4">
@@ -1447,16 +1447,17 @@
                 let total = 0, count = 0;
                 const grades = evaluations.map((ev, e) => {
                     const scoreVal = student.scores[e];
-                    const isPending = scoreVal !== '' && scoreVal !== null && scoreVal !== undefined && parseFloat(String(scoreVal).replace(',', '.')) === 0;
+                    const isPending = scoreVal !== '' && scoreVal !== null && scoreVal !== undefined && toNum(scoreVal) === 0;
                     if (isPending) return 'PND';
                     if (scoreVal === 'EX') return 'EX';
 
-                    let maxScore = ev.maxScore;
+                    let maxScore = toNum(ev.maxScore);
                     if (ev.differentiatedScores.enabled && student.highlight) {
-                        maxScore = parseFloat(ev.differentiatedScores[student.highlight]) || ev.maxScore;
+                        const diffMax = toNum(ev.differentiatedScores[student.highlight]);
+                        if (!isNaN(diffMax) && diffMax > 0) maxScore = diffMax;
                     }
-                    const base = calculateGrade(parseFloat(student.scores[e]), maxScore, ev.exigency, sheetSettings);
-                    const off = parseFloat(String((student.offsets || [])[e] ?? '').replace(',', '.'));
+                    const base = calculateGrade(toNum(student.scores[e]), maxScore, toNum(ev.exigency), sheetSettings);
+                    const off = toNum((student.offsets || [])[e]);
                     const g = isNaN(base) ? NaN : (isNaN(off) ? base : Math.max(sheetSettings.minGrade, Math.min(sheetSettings.maxGrade, base + off)));
                     if (!isNaN(g)) { total += g; count++; }
                     return g;
@@ -1532,7 +1533,7 @@
                 <div>
                     <label className="block text-xs font-medium text-[var(--muted)]">{label}</label>
                     <input type="text" inputMode="decimal" value={txt} 
-                        onChange={e => setTxt(e.target.value)} 
+                        onChange={e => setTxt(e.target.value.replace(',', '.'))} 
                         onBlur={handleBlur}
                         onKeyDown={handleKeyDown}
                         className="mt-1 w-full p-2 text-sm border border-[var(--border)] rounded-md bg-[var(--input-bg)] text-[var(--fg)] outline-none focus:ring-2 focus:ring-blue-500" />
@@ -1676,7 +1677,7 @@
                         if (newScores[e] === 'EX') {
                             newScores[e] = '';
                         }
-                        newOffsets[e] = (val === '') ? '' : (String(val).replace('.', ','));
+                        newOffsets[e] = (val === '') ? '' : (String(val).replace(',', '.'));
                     }
                     return { ...s, scores: newScores, offsets: newOffsets };
                 });
@@ -1720,17 +1721,18 @@
                 const currentSheet = sheetRef.current;
                 const student = currentSheet.studentData[r];
                 const evaluation = currentSheet.evaluations[e];
-                let numericScore = parseFloat(student.scores[e]);
+                let numericScore = toNum(student.scores[e]);
                 if (isNaN(numericScore)) numericScore = '';
-                let maxScore = evaluation.maxScore;
+                let maxScore = toNum(evaluation.maxScore);
                 if (evaluation.differentiatedScores.enabled && student.highlight) {
-                    maxScore = parseFloat(evaluation.differentiatedScores[student.highlight]) || evaluation.maxScore;
+                    const diffMax = toNum(evaluation.differentiatedScores[student.highlight]);
+                    if (!isNaN(diffMax) && diffMax > 0) maxScore = diffMax;
                 }
-                if (numericScore > maxScore) numericScore = maxScore;
+                if (numericScore !== '' && numericScore > maxScore) numericScore = maxScore;
 
                 const d = [...currentSheet.studentData];
                 d[r] = { ...d[r], scores: [...d[r].scores] };
-                d[r].scores[e] = numericScore;
+                d[r].scores[e] = numericScore !== '' ? String(numericScore) : '';
                 update({ studentData: d });
             }, [update]);
 
@@ -2138,16 +2140,20 @@
             let studentColumnWidth = typeof window !== 'undefined' && window.innerWidth < 640 ? 120 : 200;
 
             if (json[0] && json[0][0] && String(json[0][0]).startsWith('MinGrade:')) {
-                minGrade = parseFloat(String(json[0][0]).replace('MinGrade:', '')) || 1.0;
+                const parsedMin = parseFloat(String(json[0][0]).replace('MinGrade:', '').replace(',', '.'));
+                if (!isNaN(parsedMin)) minGrade = parsedMin;
             }
             if (json[1] && json[1][0] && String(json[1][0]).startsWith('PassingGrade:')) {
-                passingGrade = parseFloat(String(json[1][0]).replace('PassingGrade:', '')) || 4.0;
+                const parsedPassing = parseFloat(String(json[1][0]).replace('PassingGrade:', '').replace(',', '.'));
+                if (!isNaN(parsedPassing)) passingGrade = parsedPassing;
             }
             if (json[2] && json[2][0] && String(json[2][0]).startsWith('MaxGrade:')) {
-                maxGrade = parseFloat(String(json[2][0]).replace('MaxGrade:', '')) || 7.0;
+                const parsedMax = parseFloat(String(json[2][0]).replace('MaxGrade:', '').replace(',', '.'));
+                if (!isNaN(parsedMax)) maxGrade = parsedMax;
             }
             if (json[3] && json[3][0] && String(json[3][0]).startsWith('Width:')) {
-                studentColumnWidth = parseInt(String(json[3][0]).replace('Width:', ''), 10) || studentColumnWidth;
+                const parsedWidth = parseInt(String(json[3][0]).replace('Width:', ''), 10);
+                if (!isNaN(parsedWidth)) studentColumnWidth = parsedWidth;
             }
 
             const evaluations = [];
@@ -2157,8 +2163,8 @@
                 const maxVal = json[1] ? json[1][i] : null;
                 if (!nameEv || !maxVal) continue;
 
-                const maxScore = parseFloat(maxVal);
-                const exigency = parseFloat(json[2] ? json[2][i] : null);
+                const maxScore = parseFloat(String(maxVal).replace(',', '.'));
+                const exigency = parseFloat(String(json[2] ? json[2][i] : null).replace(',', '.'));
                 if (isNaN(maxScore) || isNaN(exigency)) continue;
 
                 let limit = headerRow.length;
@@ -2169,9 +2175,9 @@
                 let scoreIdx = i;
                 let offsetIdx = -1;
                 for (let c = i; c < limit; c++) {
-                    const h = String(headerRow[c] || '').toLowerCase();
-                    if (h === 'puntaje') scoreIdx = c;
-                    if (h === 'offset') offsetIdx = c;
+                    const h = String(headerRow[c] || '').toLowerCase().trim();
+                    if (h === 'puntaje' || h === 'score' || h === 'punt.') scoreIdx = c;
+                    if (h === 'offset' || h === 'ajuste' || h === 'aju.' || h === 'décimas' || h === 'decimas') offsetIdx = c;
                 }
 
                 const diffStr = json[3] ? (json[3][i + 1] || '') : '';
@@ -2184,9 +2190,9 @@
                     exigency,
                     differentiatedScores: {
                         enabled: json[3] ? json[3][i] === 'SI' : false,
-                        green: parseFloat(diff[0]) || maxScore,
-                        yellow: parseFloat(diff[1]) || maxScore,
-                        blue: parseFloat(diff[2]) || maxScore
+                        green: parseFloat(String(diff[0] ?? '').replace(',', '.')) || maxScore,
+                        yellow: parseFloat(String(diff[1] ?? '').replace(',', '.')) || maxScore,
+                        blue: parseFloat(String(diff[2] ?? '').replace(',', '.')) || maxScore
                     },
                     _idx: { scoreIdx, offsetIdx }
                 });
@@ -2199,8 +2205,18 @@
                 return {
                     id: generateId(),
                     name: String(r[studentCol]),
-                    scores: evaluations.map(ev => r[ev._idx.scoreIdx] ?? ''),
-                    offsets: evaluations.map(ev => ev._idx.offsetIdx !== -1 ? r[ev._idx.offsetIdx] ?? '' : ''),
+                    scores: evaluations.map(ev => {
+                        const val = r[ev._idx.scoreIdx];
+                        if (val === undefined || val === null || val === '') return '';
+                        if (String(val).trim().toUpperCase() === 'EX') return 'EX';
+                        return String(val).replace(',', '.');
+                    }),
+                    offsets: evaluations.map(ev => {
+                        if (ev._idx.offsetIdx === -1) return '';
+                        const val = r[ev._idx.offsetIdx];
+                        if (val === undefined || val === null || val === '') return '';
+                        return String(val).replace(',', '.');
+                    }),
                     // NUEVO: Leer Highlight
                     highlight: (highlightColIndex !== -1 && r[highlightColIndex]) ? r[highlightColIndex] : null
                 };
@@ -2503,10 +2519,18 @@
                     }
                     try {
                         const view = new window.google.picker.View(window.google.picker.ViewId.SPREADSHEETS);
-                        const picker = new window.google.picker.PickerBuilder()
+                        let origin = '';
+                        if (typeof window !== 'undefined' && window.location && window.location.protocol && window.location.host) {
+                            origin = window.location.protocol + '//' + window.location.host;
+                        }
+                        const builder = new window.google.picker.PickerBuilder()
                             .addView(view)
                             .setOAuthToken(token.access_token)
-                            .setDeveloperKey(apiKey)
+                            .setDeveloperKey(apiKey);
+                        if (origin && !origin.startsWith('file://')) {
+                            builder.setOrigin(origin);
+                        }
+                        const picker = builder
                             .setCallback((data) => {
                                 if (data.action === window.google.picker.Action.PICKED) {
                                     const doc = data.docs[0];
@@ -2531,15 +2555,27 @@
                     const row = [idx + 1, st.name];
                     sheet.evaluations.forEach((ev, i) => {
                         const scoreVal = st.scores[i];
-                        const isPending = scoreVal !== '' && scoreVal !== null && scoreVal !== undefined && parseFloat(String(scoreVal).replace(',', '.')) === 0;
-                        const isEx = scoreVal === 'EX';
+                        const scoreStr = (scoreVal !== undefined && scoreVal !== null && scoreVal !== '') ? String(scoreVal).replace(',', '.') : '';
+                        const isPending = scoreStr !== '' && parseFloat(scoreStr) === 0;
+                        const isEx = scoreStr === 'EX';
 
                         let maxScore = ev.maxScore;
-                        if (ev.differentiatedScores.enabled && st.highlight) maxScore = ev.differentiatedScores[st.highlight] || ev.maxScore;
-                        const score = parseFloat(st.scores[i]);
-                        const grade = (isPending || isEx) ? NaN : calculateGrade(score, maxScore, ev.exigency, sheet.settings);
-                        row.push(st.scores[i] ?? '', isPending ? 'PND' : (isEx ? 'EX' : (isNaN(grade) ? '' : grade.toFixed(1))), (st.offsets || [])[i] ?? '');
-                        if (!isNaN(grade)) { total += grade; count++; }
+                        if (ev.differentiatedScores.enabled && st.highlight) {
+                            maxScore = parseFloat(String(ev.differentiatedScores[st.highlight]).replace(',', '.')) || ev.maxScore;
+                        }
+                        const score = parseFloat(scoreStr);
+                        const baseGrade = (isPending || isEx) ? NaN : calculateGrade(score, maxScore, ev.exigency, sheet.settings);
+                        
+                        const offsetVal = (st.offsets || [])[i];
+                        const offsetStr = (offsetVal !== undefined && offsetVal !== null && offsetVal !== '') ? String(offsetVal).replace(',', '.') : '';
+                        const offsetNum = parseFloat(offsetStr);
+                        
+                        const finalGrade = isNaN(baseGrade) ? NaN : (isNaN(offsetNum) ? baseGrade : Math.max(sheet.settings.minGrade, Math.min(sheet.settings.maxGrade, baseGrade + offsetNum)));
+                        const gradeStr = isPending ? 'PND' : (isEx ? 'EX' : (isNaN(finalGrade) ? '' : finalGrade.toFixed(1)));
+                        
+                        // REORDENADO: Puntaje, Offset, Nota (Offset antes de Nota y Nota con offset integrado)
+                        row.push(scoreStr, offsetStr, gradeStr);
+                        if (!isNaN(finalGrade)) { total += finalGrade; count++; }
                     });
                     const avg = count ? (total / count) : NaN;
                     row.push(isNaN(avg) ? '' : avg.toFixed(1));
@@ -2551,7 +2587,7 @@
                     ['PassingGrade:' + sheet.settings.passingGrade, 'P. Máx:', ...sheet.evaluations.flatMap(ev => [ev.maxScore, '', ''])],
                     ['MaxGrade:' + sheet.settings.maxGrade, 'Exig:', ...sheet.evaluations.flatMap(ev => [ev.exigency, '', ''])],
                     ['Width:' + (sheet.studentColumnWidth || 200), 'Diferenciados', ...sheet.evaluations.flatMap(ev => [ev.differentiatedScores.enabled ? 'SI' : 'NO', `${ev.differentiatedScores.green},${ev.differentiatedScores.yellow},${ev.differentiatedScores.blue}`, ''])],
-                    ['#', sheet.studentHeader, ...sheet.evaluations.flatMap(() => ['Puntaje', 'Nota', 'Offset']), 'Promedio Final', 'Highlight'],
+                    ['#', sheet.studentHeader, ...sheet.evaluations.flatMap(() => ['Puntaje', 'Offset', 'Nota']), 'Promedio Final', 'Highlight'],
                     ...rows
                 ];
             }, []);
@@ -3197,33 +3233,7 @@
                 window.loadXLSX().then(XLSX => {
                     const wb = XLSX.utils.book_new();
                     sheets.forEach(sheet => {
-                        const rows = sheet.studentData.map((st, idx) => {
-                            let total = 0, count = 0;
-                            const row = [idx + 1, st.name];
-                            sheet.evaluations.forEach((ev, i) => {
-                                const scoreVal = st.scores[i];
-                                const isPending = scoreVal !== '' && scoreVal !== null && scoreVal !== undefined && parseFloat(String(scoreVal).replace(',', '.')) === 0;
-
-                                let maxScore = ev.maxScore;
-                                if (ev.differentiatedScores.enabled && st.highlight) maxScore = ev.differentiatedScores[st.highlight] || ev.maxScore;
-                                const score = parseFloat(st.scores[i]);
-                                const grade = isPending ? NaN : calculateGrade(score, maxScore, ev.exigency, sheet.settings);
-                                row.push(st.scores[i] ?? '', isPending ? 'PND' : (isNaN(grade) ? '' : grade.toFixed(1)), (st.offsets || [])[i] ?? '');
-                                if (!isNaN(grade)) { total += grade; count++; }
-                            });
-                            const avg = count ? (total / count) : NaN;
-                            row.push(isNaN(avg) ? '' : avg.toFixed(1));
-                            row.push(st.highlight || '');
-                            return row;
-                        });
-                        const aoa = [
-                            ['MinGrade:' + sheet.settings.minGrade, '', ...sheet.evaluations.flatMap(ev => [ev.name, '', ''])],
-                            ['PassingGrade:' + sheet.settings.passingGrade, 'P. Máx:', ...sheet.evaluations.flatMap(ev => [ev.maxScore, '', ''])],
-                            ['MaxGrade:' + sheet.settings.maxGrade, 'Exig:', ...sheet.evaluations.flatMap(ev => [ev.exigency, '', ''])],
-                            ['Width:' + (sheet.studentColumnWidth || 200), 'Diferenciados', ...sheet.evaluations.flatMap(ev => [ev.differentiatedScores.enabled ? 'SI' : 'NO', `${ev.differentiatedScores.green},${ev.differentiatedScores.yellow},${ev.differentiatedScores.blue}`, ''])],
-                            ['#', sheet.studentHeader, ...sheet.evaluations.flatMap(() => ['Puntaje', 'Nota', 'Offset']), 'Promedio Final', 'Highlight'],
-                            ...rows
-                        ];
+                        const aoa = sheetToAoa(sheet);
                         const ws = XLSX.utils.aoa_to_sheet(aoa);
                         XLSX.utils.book_append_sheet(wb, ws, sheet.name);
                     });
